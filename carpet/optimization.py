@@ -1,4 +1,7 @@
 """ Usefull functions for optimization."""
+# Authors: Hamza Cherkaoui <hamza.cherkaoui@inria.fr>
+# License: BSD (3-clause)
+
 import time
 import numpy as np
 from scipy.optimize.linesearch import line_search_armijo
@@ -44,7 +47,7 @@ def condatvu(grad, obj, prox, psi, adj_psi, y0, x0, lbda, sigma, tau, rho=1.0,
 
         # printing
         if debug and verbose > 0:
-            print(f"[{name}] Iteration {ii + 1} / {max_iter}, "
+            print(f"[{name}] Iteration {ii + 1} / {max_iter}, "  # noqa: E999
                   f"loss = {pobj_[ii]:.6e}, dg = {dg[ii]:.3e},")
 
         # early-stopping
@@ -64,8 +67,7 @@ def condatvu(grad, obj, prox, psi, adj_psi, y0, x0, lbda, sigma, tau, rho=1.0,
 def fista(grad, obj, prox, x0, momentum='fista', restarting=None, max_iter=100,
           step_size=None, early_stopping=True, eps=np.finfo(np.float64).eps,
           times=False, debug=False, verbose=0, name="Optimization"):
-    """ ISTA like algorithm.
-    """
+    """ ISTA like algorithm. """
     # parameters checking
     if verbose and not debug:
         print(f"[{name}] Can't have verbose if cost-func is not computed, "

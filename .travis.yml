@@ -1,0 +1,21 @@
+language: python
+python: "3.6"
+
+install:
+      # Install deps
+    - pip install 'joblib>=0.11' 'numpy>=1.14.0' 'scipy>=1.0.0' 'matplotlib>=2.1.2' 'torch>=1.4.0'
+      # Install hemolearn
+    - pip install -e .
+      # Install test deps
+    - pip install pytest pytest-cov coverage codecov flake8
+
+script:
+    - set -e
+    - flake8 --count carpet
+    - pytest -vl --cov=carpet --cov-append
+
+after_success:
+    - codecov
+
+notifications:
+    email: false

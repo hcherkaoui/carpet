@@ -1,4 +1,7 @@
 """ Utilities to generate a synthetic 1d data. """
+# Authors: Hamza Cherkaoui <hamza.cherkaoui@inria.fr>
+# License: BSD (3-clause)
+
 import numpy as np
 import torch
 from torch.nn.functional import relu as relu_tensor
@@ -26,4 +29,4 @@ def soft_thresholding(z, lbda, step_size):
     elif isinstance(z, torch.Tensor):
         return soft_thresholding_tensor(z, lbda, step_size)
     else:
-        raise ValueError(f"wrong type for z, got {type(z)}")
+        raise ValueError(f"wrong type for z, got {type(z)}")  # noqa: E999

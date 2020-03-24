@@ -7,10 +7,10 @@ import time
 import matplotlib.pyplot as plt
 import numpy as np
 from carpet.datasets import synthetic_1d_dataset
-from carpet.synthesis_loss_gradient import obj
-from carpet.lista import Lista
+from carpet.analysis_loss_gradient import obj
+from carpet.lista import StepLTV
 from carpet.utils import logspace_layers
-from utils import ista_like_synth_tv, lista_like_synth_tv
+from utils import ista_like_analy_tv, lista_like_analy_tv
 
 
 if __name__ == '__main__':
@@ -25,12 +25,12 @@ if __name__ == '__main__':
         os.makedirs(ploting_dir)
 
     # Define variables
-    n_samples = 2000
+    n_samples = 3000
     n_samples_testing = 1000
-    m = 5
+    m = 10
     s = 0.2
     snr = 0.0
-    all_n_layers = logspace_layers(n_layers=10, max_depth=100)
+    all_n_layers = logspace_layers(n_layers=10, max_depth=50)
     ticks_layers = np.array([0.9] + all_n_layers)
     lbda = 0.5
 
@@ -38,19 +38,17 @@ if __name__ == '__main__':
     print(f'Seed used = {seed}')  # noqa: E999
 
     # Generate data
-    D = np.triu(np.ones((m, m)))
-    x, _, _ = synthetic_1d_dataset(D=D, n=n_samples, s=s, snr=snr, seed=seed)
+    L = np.triu(np.ones((m, m)))
+    x, _, _ = synthetic_1d_dataset(D=L, n=n_samples, s=s, snr=snr, seed=seed)
+    D = (np.eye(m, k=-1) - np.eye(m, k=0))[:, :-1]
 
     x_train = x[n_samples_testing:, :]
     x_test = x[:n_samples_testing, :]
 
     l_train_loss, l_test_loss = [], []
-    names = ['ISTA-neural-net', 'LISTA-original', 'LISTA-coupled',
-             'LISTA-step', 'ISTA-iterative', 'FISTA-iterative']
-    funcs_bench = [lista_like_synth_tv, lista_like_synth_tv,
-                   lista_like_synth_tv, lista_like_synth_tv,
-                   ista_like_synth_tv, ista_like_synth_tv]
-    l_type_ = ['ista', 'lista', 'coupled', 'step', 'ista', 'fista']
+    names = ['LTV-step', 'Sub-gradient']
+    funcs_bench = [lista_like_analy_tv, ista_like_analy_tv]
+    l_type_ = ['step', 'ista']
     for name, func_bench, type_ in zip(names, funcs_bench, l_type_):
         print(f"[main script] running {name}")
         print("-" * 80)
@@ -65,17 +63,14 @@ if __name__ == '__main__':
     # Plotting processing
     lw = 6
     eps_plots = 1.0e-10
-    z_star_train = Lista(D=D, n_layers=10000).transform(x_train, lbda)
-    min_train_loss = obj(z_star_train, D, x_train, lbda)
-    z_star_test = Lista(D=D, n_layers=10000).transform(x_test, lbda)
-    min_test_loss = obj(z_star_test, D, x_test, lbda)
+    min_train_loss = np.min(np.c_[l_train_loss])
+    min_test_loss = np.min(np.c_[l_test_loss])
 
     # Plotting train loss function
     plt.figure(f"[{__file__}] Train loss function", figsize=(6, 4))
     for name, train_loss in zip(names, l_train_loss):
-        ls = '--' if name == 'ISTA-iterative' else '-'
         plt.loglog(ticks_layers, train_loss - (min_train_loss - eps_plots),
-                   ls=ls, lw=lw, label=name)
+                   lw=lw, label=name)
     plt.legend(bbox_to_anchor=(1.05, 1.0), loc='upper left', borderaxespad=0.0,
                fontsize=12)
     plt.grid()
@@ -83,16 +78,15 @@ if __name__ == '__main__':
     plt.ylabel('$F(.) - F(z^*)$', fontsize=15)
     plt.title('Loss function evolution\non training set', fontsize=15)
     plt.tight_layout()
-    filename = os.path.join(ploting_dir, "train_synthesis_loss.pdf")
+    filename = os.path.join(ploting_dir, "train_analysis_loss.pdf")
     print("Saving plot at '{}'".format(filename))
     plt.savefig(filename, dpi=300)
 
     # Plotting test loss function
     plt.figure(f"[{__file__}] Test loss function", figsize=(6, 4))
     for name, test_loss in zip(names, l_test_loss):
-        ls = '--' if name == 'ISTA-iterative' else '-'
         plt.loglog(ticks_layers, test_loss - (min_test_loss - eps_plots),
-                   ls=ls, lw=lw, label=name)
+                   lw=lw, label=name)
     plt.legend(bbox_to_anchor=(1.05, 1.0), loc='upper left', borderaxespad=0.0,
                fontsize=12)
     plt.grid()
@@ -100,7 +94,7 @@ if __name__ == '__main__':
     plt.ylabel("$F(.) - F(z^*)$", fontsize=15)
     plt.title('Loss function evolution\non testing set', fontsize=15)
     plt.tight_layout()
-    filename = os.path.join(ploting_dir, "test_synthesis_loss.pdf")
+    filename = os.path.join(ploting_dir, "test_analysis_loss.pdf")
     print("Saving plot at '{}'".format(filename))
     plt.savefig(filename, dpi=300)
 

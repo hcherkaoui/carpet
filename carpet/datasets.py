@@ -1,4 +1,7 @@
 """ Utilities to generate a synthetic 1d data. """
+# Authors: Hamza Cherkaoui <hamza.cherkaoui@inria.fr>
+# License: BSD (3-clause)
+
 import numpy as np
 from joblib import Parallel, delayed
 from .checks import check_random_state
@@ -36,46 +39,59 @@ def add_gaussian_noise(signal, snr, random_state=None):
     return noisy_signal, noise
 
 
-def _synthetic_1d_signal(m=100, s=0.1, snr=1.0, rng=None):
-    """ Generate one 1d synthetic signal. """
+def _generate_dirac(m=100, s=0.1, rng=None):
+    """ Generate a Dirac signal. """
     m_s = int(m*s)
+    assert m_s != 0, "Generated zero z, please reduce sparsity"
     idx_non_zero = rng.randint(0, m, m_s)
     z = np.zeros(m)
     z[idx_non_zero] = rng.randn(m_s)
-    Lz = np.cumsum(z)
-    observed_Lz, _ = add_gaussian_noise(signal=Lz, snr=snr, random_state=rng)
-    return observed_Lz[None, :], Lz[None, :], z[None, :]
+    return z
 
 
-def synthetic_1d_dataset(n=1000, m=100, s=0.1, snr=1.0, seed=None, n_jobs=1):
+def _generate_1d_signal(D, s=0.1, snr=1.0, rng=None):
+    """ Generate one 1d synthetic signal. """
+    z = _generate_dirac(m=D.shape[0], s=s, rng=rng)
+    Dz = z.dot(D)
+    x, _ = add_gaussian_noise(signal=Dz, snr=snr, random_state=rng)
+    return x[None, :], Dz[None, :], z[None, :]
+
+
+def synthetic_1d_dataset(D, n=1000, s=0.1, snr=1.0, seed=None, n_jobs=1):
     """ Generate n samples of 1d synthetic signal.
 
     Parameters
     ----------
+    D : np.array, shape=(m1, m2), dictionary
     n : int, number of 1d signal to generate
-    m : int, length of the signal generated
     s : float, sparsity of the derivative of the signal generated
     snr : float, SNR of the signal generated
     seed : int, random-seed used to initialize the random-instance
-    n_jobs : int, number of CPU to use
+    n_jobs : int, (default=1), number of CPU to use
 
     Return
     ------
-    observed_LZ : numpy array, shape (n, m), noisy observation of the signal
+    x : numpy array, shape (n, m), noisy observation of the signal
                  generated
-    LZ : numpy array, shape (n, m), signal generated
-    Z : numpy array, shape (n, m), derivative of the signal generated
+    Dz : numpy array, shape (n, m), signal
+    z : numpy array, shape (n, m), source signal
     """
     rng = check_random_state(seed)
 
-    params = dict(m=m, s=s, snr=snr, rng=rng)
-    results = Parallel(n_jobs=n_jobs)(delayed(_synthetic_1d_signal)(**params)
+    # generate samples
+    params = dict(D=D, s=s, snr=snr, rng=rng)
+    results = Parallel(n_jobs=n_jobs)(delayed(_generate_1d_signal)(**params)
                                       for _ in range(n))
 
-    observed_LZ, LZ, Z = [], [], []
-    for observed_Lz, Lz, z in results:
-        observed_LZ.append(observed_Lz.ravel())
-        LZ.append(Lz.ravel())
-        Z.append(z.ravel())
+    # stack samples
+    x, Dz, z = [], [], []
+    for x_, Dz_, z_ in results:
+        x.append(x_.ravel())
+        Dz.append(Dz_.ravel())
+        z.append(z_.ravel())
+    x, Dz, z = np.c_[x], np.c_[Dz], np.c_[z]
 
-    return np.c_[observed_LZ], np.c_[LZ], np.c_[Z]
+    # lbda_max = 1.0 for each sample
+    x /= np.max(np.abs(x.dot(D.T)), axis=1, keepdims=True)
+
+    return x, Dz, z

@@ -1,116 +1,145 @@
 """ Utils module for examples. """
+# Authors: Hamza Cherkaoui <hamza.cherkaoui@inria.fr>
+# License: BSD (3-clause)
+
 import time
 import numpy as np
-from carpet.lista import Lista
-from carpet.synthesis_loss_gradient import grad, subgrad, obj
+from carpet.lista import ALL_LISTA, ALL_LTV
+from carpet.synthesis_loss_gradient import grad as grad_synth
+from carpet.synthesis_loss_gradient import obj as obj_synth
+from carpet.analysis_loss_gradient import subgrad as subgrad_analy
+from carpet.analysis_loss_gradient import obj as obj_analy
 from carpet.optimization import fista
-from carpet.utils import lipschitz_est
 from carpet.proximity import soft_thresholding
 
 
-def lista_like_tv(training_dataset, testing_dataset, D, lbda, type_='lista',
-                  n_layers=10):
-    """ LISTA-like solver for TV problem. """
-    previous_parameters = None
+def lista_like_synth_tv(x_train, x_test, D, lbda, all_n_layers, type_='lista'):
+    """ LISTA-like solver for synthesis TV problem. """
+    z0_train = np.zeros_like(x_train.dot(D.T))
+    z0_test = np.zeros_like(x_test.dot(D.T))
 
-    # get the loss function evolution for a given 'algorithm'
-    train_loss, test_loss = [], []
-    for n_layer_ in range(1, n_layers + 1):
+    previous_parameters = None
+    train_loss = [obj_synth(z0_train, D, x_train, lbda)]
+    test_loss = [obj_synth(z0_test, D, x_test, lbda)]
+    for n_layers in all_n_layers:
+
         # declare network
         parametrization = 'lista' if type_ == 'ista' else type_
-        lista = Lista(D=D, n_layers=n_layers, parametrization=parametrization,
-                        max_iter=100, device='cpu', name=type_, verbose=1)
-        t0_ = time.time()
-
-        # initialize network
         if previous_parameters is not None:
-            # iterate on layers
-            for layer_parameters in previous_parameters:
-                # iterate on different parameters
-                for parameter_name, parameter in layer_parameters.items():
-                        lista.set_parameters(parameter_name, parameter)
+            lista = ALL_LISTA[parametrization](D=D, n_layers=n_layers,
+                                max_iter=500, device='cpu', name=type_,
+                                initial_parameters=previous_parameters,
+                                verbose=1)
+        else:
+            lista = ALL_LISTA[parametrization](D=D, n_layers=n_layers,
+                              max_iter=500, device='cpu', name=type_,
+                              verbose=1)
 
+        t0_ = time.time()
         if type_ != 'ista':  # train network
-            lista.fit(training_dataset, lmbd=lbda)
+            lista.fit(x_train, lmbd=lbda)
+
+        print(f"[{type_}] model fitted in {time.time() - t0_:.1f}s")
 
         # save parameters
         previous_parameters = lista.export_parameters()
 
+        # get train and test error
+        z_train = lista.transform(x_train, lbda, output_layer=n_layers)
+        train_loss.append(obj_synth(z_train, D, x_train, lbda))
+
+        z_test = lista.transform(x_test, lbda, output_layer=n_layers)
+        test_loss.append(obj_synth(z_test, D, x_test, lbda))
+
+    return np.array(train_loss), np.array(test_loss)
+
+
+def ista_like_synth_tv(x_train, x_test, D, lbda, all_n_layers, type_='ista'):
+    """ ISTA-like solver for synthesis TV problem. """
+    max_iter = all_n_layers[-1]
+    step_size = 1.0 / np.linalg.norm(D.T.dot(D), ord=2)
+
+    params = dict(
+            grad=lambda z: grad_synth(z, D, x_train),
+            obj=lambda z: obj_synth(z, D, x_train, lbda),
+            prox=lambda z, step_size: soft_thresholding(z, lbda, step_size),
+            x0=np.zeros_like(x_train),  momentum=type_, restarting=None,
+            max_iter=max_iter, step_size=step_size, early_stopping=False,
+            debug=True, verbose=1,
+            )
+    _, train_loss = fista(**params)
+    print('')
+
+    params = dict(
+            grad=lambda z: grad_synth(z, D, x_test),
+            obj=lambda z: obj_synth(z, D, x_test, lbda),
+            prox=lambda z, step_size: soft_thresholding(z, lbda, step_size),
+            x0=np.zeros_like(x_test),  momentum=type_, restarting=None,
+            max_iter=max_iter, step_size=step_size, early_stopping=False,
+            debug=True, verbose=1,
+            )
+    _, test_loss = fista(**params)
+
+    return train_loss[[0] + all_n_layers], test_loss[[0] + all_n_layers]
+
+
+def lista_like_analy_tv(x_train, x_test, D, lbda, all_n_layers, type_='lista'):
+    """ LISTA-like solver for analysis TV problem. """
+    z0_train = np.zeros_like(x_train)
+    z0_test = np.zeros_like(x_test)
+
+    previous_parameters = [dict(step_size=np.array(1.0e-8))] * all_n_layers[0]
+    train_loss_init = obj_analy(z0_train, D, x_train, lbda)
+    test_loss_init = obj_analy(z0_test, D, x_test, lbda)
+    train_loss, test_loss = [train_loss_init], [test_loss_init]
+    for n_layers in all_n_layers:
+
+        # declare network
+        lista = ALL_LTV[type_](D=D, n_layers=n_layers, max_iter=500,
+                               device='cpu', name=type_, per_layer='one_shot',
+                               initial_parameters=previous_parameters,
+                               verbose=10)
+
+        t0_ = time.time()
+        lista.fit(x_train, lmbd=lbda)
+
         print(f"[{type_}] model fitted in {time.time() - t0_:.1f}s")
 
+        # save parameters
+        previous_parameters = lista.export_parameters()
+
         # get train and test error
-        z_train = lista.transform(training_dataset, lbda,
-                                  output_layer=n_layer_)
-        train_loss.append(obj(z_train, D, training_dataset, lbda))
+        z_train = lista.transform(x_train, lbda, output_layer=n_layers)
+        train_loss.append(obj_analy(z_train, D, x_train, lbda))
 
-        z_test = lista.transform(testing_dataset, lbda, output_layer=n_layer_)
-        test_loss.append(obj(z_test, D, testing_dataset, lbda))
+        z_test = lista.transform(x_test, lbda, output_layer=n_layers)
+        test_loss.append(obj_analy(z_test, D, x_test, lbda))
 
-    train_loss = np.array(train_loss)
-    test_loss = np.array(test_loss)
-
-    # manually add loss func init value
-    test_loss_init = obj(np.zeros_like(testing_dataset),
-                         D, testing_dataset, lbda)
-    test_loss = np.insert(test_loss, 0, test_loss_init)
-    train_loss_init = obj(np.zeros_like(training_dataset),
-                            D, training_dataset, lbda)
-    train_loss = np.insert(train_loss, 0, train_loss_init)
-
-    return train_loss, test_loss
+    return np.array(train_loss), np.array(test_loss)
 
 
-def ista_like_tv(training_dataset, testing_dataset, D, lbda, type_='ista',
-                 n_layers=1000):
-    """ ISTA-like solver for TV problem. """
-    # define initialization
-    z0 = np.zeros_like(testing_dataset)
+def ista_like_analy_tv(x_train, x_test, D, lbda, all_n_layers, type_='ista'):
+    """ ISTA-like solver for analysis TV problem. """
+    max_iter = all_n_layers[-1]
+    step_size = 1.0e-8
 
-    # define type of iteration
-    if type_ == 'fista':
-        momentum = 'fista'
-        restarting = None
-    elif type_ == 'rsfista':
-        momentum = 'fista'
-        restarting = 'obj'
-    else:
-        momentum = 'ista'
-        restarting = None
+    params = dict(
+            grad=lambda z: subgrad_analy(z, D, x_train, lbda),
+            obj=lambda z: obj_analy(z, D, x_train, lbda),
+            prox=lambda z, step_size: z, x0=np.zeros_like(x_train),
+            momentum=type_, restarting=None, max_iter=max_iter,
+            step_size=step_size, early_stopping=False, debug=True, verbose=1,
+            )
+    _, train_loss = fista(**params)
+    print('')
 
-    # define function obj
-    def _obj(z):
-        return obj(z, D, testing_dataset, lbda)
+    params = dict(
+            grad=lambda z: subgrad_analy(z, D, x_test, lbda),
+            obj=lambda z: obj_analy(z, D, x_test, lbda),
+            prox=lambda z, step_size: z, x0=np.zeros_like(x_test),
+            momentum='ista', restarting=None, max_iter=max_iter,
+            step_size=step_size, early_stopping=False, debug=True, verbose=1,
+            )
+    _, test_loss = fista(**params)
 
-    # define gradient
-    if type_ == 'sub-gradient':
-        def _grad(z):
-            return subgrad(z, D, testing_dataset, lbda)
-    else:
-        def _grad(z):
-            return grad(z, D, testing_dataset)
-
-    if type_ == 'sub-gradient':
-        def _prox(z, step_size):
-            return z
-    else:
-        def _prox(z, step_size):
-            return soft_thresholding(z, lbda, step_size)
-
-    # define step-size
-    if type_ == 'sub-gradient':
-        # hard to majorate Lipschitz constant for sub-grad
-        def AtA(z):
-            return subgrad(z, D, testing_dataset, lbda)
-        lipsc = 100. * lipschitz_est(AtA, z0.shape)
-    else:
-        lipsc = np.linalg.norm(D.T.dot(D), ord=2)
-    step_size = 1.0 / lipsc
-
-    # ista like iteration
-    params = dict(grad=_grad, obj=_obj, prox=_prox, x0=z0,  momentum=momentum,
-                  restarting=restarting, max_iter=n_layers,
-                  step_size=step_size, early_stopping=False, debug=True,
-                  verbose=1)
-    _, loss = fista(**params)
-
-    return None, loss
+    return train_loss[[0] + all_n_layers], test_loss[[0] + all_n_layers]

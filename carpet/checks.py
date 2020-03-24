@@ -1,4 +1,7 @@
 """ Utilities to generate a synthetic 1d data. """
+# Authors: Hamza Cherkaoui <hamza.cherkaoui@inria.fr>
+# License: BSD (3-clause)
+
 import numpy as np
 import torch
 
@@ -21,14 +24,16 @@ def check_random_state(seed):
         return np.random.RandomState(seed)
     if isinstance(seed, np.random.RandomState):
         return seed
-    raise ValueError(f'{seed} cannot be used to seed a '
+    raise ValueError(f'{seed} cannot be used to seed a '  # noqa: E999
                      f'numpy.random.RandomState instance')
 
 
 def check_tensor(x, device=None):
     """ Force x to be a torch.Tensor. """
     if isinstance(x, np.ndarray) or type(x) in [int, float]:
-        x = torch.Tensor(x)
-    if isinstance(x, torch.Tensor):
-        return x.to(device=device, dtype=torch.float64)
+        x = torch.Tensor(x, device=device)
+    elif isinstance(x, torch.Tensor):
+        return x.to(device=device)
+    else:
+        ValueError(f"Invalid type for x, got {type(x)}")
     return x
