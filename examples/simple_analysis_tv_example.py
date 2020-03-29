@@ -1,4 +1,4 @@
-""" Compare the convergence rate for the synthesis 1d TV-l1 problem. """
+""" Compare the convergence rate for the analysis 1d TV-l1 problem. """
 # Authors: Hamza Cherkaoui <hamza.cherkaoui@inria.fr>
 # License: BSD (3-clause)
 
@@ -6,6 +6,7 @@ import os
 import time
 import matplotlib.pyplot as plt
 import numpy as np
+from prox_tv import tv1_1d
 from carpet.datasets import synthetic_1d_dataset
 from carpet.analysis_loss_gradient import obj
 from carpet.lista import StepLTV
@@ -25,9 +26,9 @@ if __name__ == '__main__':
         os.makedirs(ploting_dir)
 
     # Define variables
-    n_samples = 3000
+    n_samples = 2000
     n_samples_testing = 1000
-    m = 10
+    m = 5
     s = 0.2
     snr = 0.0
     all_n_layers = logspace_layers(n_layers=10, max_depth=50)
@@ -39,8 +40,8 @@ if __name__ == '__main__':
 
     # Generate data
     L = np.triu(np.ones((m, m)))
-    x, _, _ = synthetic_1d_dataset(D=L, n=n_samples, s=s, snr=snr, seed=seed)
     D = (np.eye(m, k=-1) - np.eye(m, k=0))[:, :-1]
+    x, _, _ = synthetic_1d_dataset(D=L, n=n_samples, s=s, snr=snr, seed=seed)
 
     x_train = x[n_samples_testing:, :]
     x_test = x[:n_samples_testing, :]
@@ -63,14 +64,18 @@ if __name__ == '__main__':
     # Plotting processing
     lw = 6
     eps_plots = 1.0e-10
-    min_train_loss = np.min(np.c_[l_train_loss])
-    min_test_loss = np.min(np.c_[l_test_loss])
+
+    z_hat_train_star = np.c_[[tv1_1d(x_train_, lbda) for x_train_ in x_train]]
+    min_train_loss = obj(z_hat_train_star, D, x_train, lbda)
+    z_hat_test_star = np.c_[[tv1_1d(x_test_, lbda) for x_test_ in x_test]]
+    min_test_loss = obj(z_hat_test_star, D, x_test, lbda)
 
     # Plotting train loss function
     plt.figure(f"[{__file__}] Train loss function", figsize=(6, 4))
     for name, train_loss in zip(names, l_train_loss):
+        ls = '--' if name == 'Sub-gradient' else '-'
         plt.loglog(ticks_layers, train_loss - (min_train_loss - eps_plots),
-                   lw=lw, label=name)
+                   ls=ls, lw=lw, label=name)
     plt.legend(bbox_to_anchor=(1.05, 1.0), loc='upper left', borderaxespad=0.0,
                fontsize=12)
     plt.grid()
@@ -85,8 +90,9 @@ if __name__ == '__main__':
     # Plotting test loss function
     plt.figure(f"[{__file__}] Test loss function", figsize=(6, 4))
     for name, test_loss in zip(names, l_test_loss):
+        ls = '--' if name == 'Sub-gradient' else '-'
         plt.loglog(ticks_layers, test_loss - (min_test_loss - eps_plots),
-                   lw=lw, label=name)
+                   ls=ls, lw=lw, label=name)
     plt.legend(bbox_to_anchor=(1.05, 1.0), loc='upper left', borderaxespad=0.0,
                fontsize=12)
     plt.grid()

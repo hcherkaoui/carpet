@@ -27,12 +27,12 @@ def lista_like_synth_tv(x_train, x_test, D, lbda, all_n_layers, type_='lista'):
         parametrization = 'lista' if type_ == 'ista' else type_
         if previous_parameters is not None:
             lista = ALL_LISTA[parametrization](D=D, n_layers=n_layers,
-                                max_iter=500, device='cpu', name=type_,
+                                max_iter=100, device='cpu', name=type_,
                                 initial_parameters=previous_parameters,
                                 verbose=1)
         else:
             lista = ALL_LISTA[parametrization](D=D, n_layers=n_layers,
-                              max_iter=500, device='cpu', name=type_,
+                              max_iter=100, device='cpu', name=type_,
                               verbose=1)
 
         t0_ = time.time()
@@ -85,20 +85,26 @@ def ista_like_synth_tv(x_train, x_test, D, lbda, all_n_layers, type_='ista'):
 
 def lista_like_analy_tv(x_train, x_test, D, lbda, all_n_layers, type_='lista'):
     """ LISTA-like solver for analysis TV problem. """
+    previous_parameters = None
+
     z0_train = np.zeros_like(x_train)
     z0_test = np.zeros_like(x_test)
 
-    previous_parameters = [dict(step_size=np.array(1.0e-8))] * all_n_layers[0]
     train_loss_init = obj_analy(z0_train, D, x_train, lbda)
     test_loss_init = obj_analy(z0_test, D, x_test, lbda)
     train_loss, test_loss = [train_loss_init], [test_loss_init]
     for n_layers in all_n_layers:
 
         # declare network
-        lista = ALL_LTV[type_](D=D, n_layers=n_layers, max_iter=500,
-                               device='cpu', name=type_, per_layer='one_shot',
-                               initial_parameters=previous_parameters,
-                               verbose=10)
+        if previous_parameters is not None:
+            lista = ALL_LTV[type_](D=D, n_layers=n_layers, max_iter=100,
+                                device='cpu', name=type_, per_layer='one_shot',
+                                initial_parameters=previous_parameters,
+                                verbose=10)
+        else:
+            lista = ALL_LTV[type_](D=D, n_layers=n_layers, max_iter=100,
+                                device='cpu', name=type_, per_layer='one_shot',
+                                verbose=10)
 
         t0_ = time.time()
         lista.fit(x_train, lmbd=lbda)

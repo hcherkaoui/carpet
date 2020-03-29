@@ -255,26 +255,59 @@ class ListaBase(torch.nn.Module):
         return self
 
     def _fit_sub_net_batch_gd(self, x, lmbd, parameters, n_layer, max_iter,
-                              eps=1.0e-20):
+                              max_iter_line_search=5, eps=1.0e-20):
         """ Fit the parameters of the sub-network. """
-        lr = 1.0
-        self.training_loss_ = []
+        z_hat = self(x, lmbd, output_layer=n_layer)
+        self.training_loss_ = [float(self._loss_fn(x, lmbd, z_hat))]
         self.norm_grad_ = []
 
         for i in range(max_iter):
-            # Compute forward operator
-            if self.per_layer == 'recursive':
+
+            lr = 1.0
+
+            # Back-tracking line search descent step
+            for j in range(max_iter_line_search):
+
+                # Compute actual loss
                 z_hat = self(x, lmbd, output_layer=n_layer)
-            else:
-                z_hat = self(x, lmbd, output_layer=self.n_layers)
-            loss = self._loss_fn(x, lmbd, z_hat)
-            loss_value = float(loss)
+                loss = self._loss_fn(x, lmbd, z_hat)
+
+                # Next gradient iterate
+                self.zero_grad()
+                loss.backward()
+                max_norm_grad = self._update_parameters(parameters, lr=lr)
+
+                # Compute new possible loss
+                z_hat = self(x, lmbd, output_layer=n_layer)
+                loss_value = float(self._loss_fn(x, lmbd, z_hat))
+
+                # accepting the point
+                if self.training_loss_[-1] > loss_value:
+                    self.training_loss_.append(loss_value)
+                    self.norm_grad_.append(max_norm_grad)
+                    break
+                # rejecting the point
+                else:
+                    # lr is too low anyway
+                    if lr < 1.0e-20:
+                        if self.verbose > 1:
+                            print(f"\r[{self.name} - "  # noqa: E999
+                                  f"layer{n_layer}] "
+                                  f"Fitting, step_size={lr:.2e}, "
+                                  f"iter={i}/{max_iter}, "
+                                  f"Back-tracking line search failed")
+                        break
+                    # cancel gradient step and decrease lr
+                    else:
+                        _ = self._update_parameters(parameters, lr=-lr)
+                        lr /= 2.0
 
             # Verbosity
-            if self.verbose > 1 and i % 50 == 0:
-                print(f"Fitting model (layer "  # noqa: E999
-                      f"{n_layer}/{self.n_layers})"
-                      f" : {i}/{max_iter} : loss = {loss_value:.2e}")
+            if self.verbose > 1 and self.training_loss_ and i % 50 == 0:
+                print(f"\r[{self.name} - layer{n_layer}] "  # noqa: E999
+                      f"Fitting, step_size={lr:.2e}, "
+                      f"iter={i}/{max_iter}, "
+                      f"loss={self.training_loss_[-1]:.2e}")
 
             # Stopping criterion
             if len(self.training_loss_) > 1:
@@ -282,26 +315,10 @@ class ListaBase(torch.nn.Module):
                 if eps_loss < eps:
                     if self.verbose:
                         print(f"\r[{self.name} - layer{n_layer}] "
-                              f"Converged, step_size={lr:.2e}, "
-                              f"norm_g={self.norm_grad_[-1]:.2e}")
-                    break  # converged
-
-            # Back-tracking line search
-            if self.training_loss_ and self.training_loss_[-1] < loss_value:
-                # if loss function increasing: decrease lr
-                lr = self._backtrack_parameters(parameters, lr)
-                continue
-
-            # Accepting the previous point
-            self.training_loss_.append(loss_value)
-
-            # Reset gradient
-            self.zero_grad()
-
-            # Next gradient iterate
-            loss.backward()
-            max_norm_grad = self._update_parameters(parameters, lr=lr)
-            self.norm_grad_.append(max_norm_grad)
+                              f"Converged, step_size={lr:.2e}, ",
+                              f"iter={i}/{max_iter}, "
+                              f"loss={self.training_loss_[-1]:.2e}")
+                    break
 
     def _update_parameters(self, parameters, lr):
         """ Parameters update step for the gradient descent. """
@@ -329,20 +346,12 @@ class ListaBase(torch.nn.Module):
 
         return float(max_norm_grad)
 
-    def _backtrack_parameters(self, parameters, lr):
-        """ Backtracking parameters. """
-        lr /= 2.0
-        for param, saved_grad in zip(parameters, self._saved_gradient):
-            if saved_grad is not None:
-                param.data.add_(lr, saved_grad)  # half cancel previous step
-        return np.minimum(lr, 1.0e10)  # watch-dog
-
     def _check_forward_inputs(self, x, z0, output_layer, enable_none=False):
         """ Format properly the inputs for the 'forward' method. """
-        x = x if (x is None) and enable_none \
-            else check_tensor(x, device=self.device)
-        z0 = z0 if (z0 is None) and enable_none \
-            else check_tensor(z0, device=self.device)
+        x_none_ok = (x is None) and enable_none
+        x = x if x_none_ok else check_tensor(x, device=self.device)
+        z0_none_ok = (z0 is None) and enable_none
+        z0 = z0 if z0_none_ok else check_tensor(z0, device=self.device)
         if output_layer is None:
             output_layer = self.n_layers
         elif output_layer > self.n_layers:

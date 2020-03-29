@@ -54,7 +54,7 @@ class Lista(ListaBase):
         # check inputs
         x, z_hat, output_layer = self._check_forward_inputs(x, z0,
                                                             output_layer,
-                                                            enable_none=True)
+                                                            enable_none=False)
 
         for layer_params in self.layers_parameters[:output_layer]:
             # retrieve parameters
@@ -121,7 +121,7 @@ class CoupledLista(ListaBase):
         # check inputs
         x, z_hat, output_layer = self._check_forward_inputs(x, z0,
                                                             output_layer,
-                                                            enable_none=True)
+                                                            enable_none=False)
 
         for layer_params in self.layers_parameters[:output_layer]:
             # retrieve parameters
@@ -192,7 +192,7 @@ class ALista(ListaBase):
         # check inputs
         x, z_hat, output_layer = self._check_forward_inputs(x, z0,
                                                             output_layer,
-                                                            enable_none=True)
+                                                            enable_none=False)
 
         for layer_params in self.layers_parameters[:output_layer]:
             # retrieve parameters
@@ -261,7 +261,7 @@ class HessianLista(ListaBase):
         # check inputs
         x, z_hat, output_layer = self._check_forward_inputs(x, z0,
                                                             output_layer,
-                                                            enable_none=True)
+                                                            enable_none=False)
 
         for layer_params in self.layers_parameters[:output_layer]:
             # retrieve parameters
@@ -328,7 +328,7 @@ class StepLista(ListaBase):
         # check inputs
         x, z_hat, output_layer = self._check_forward_inputs(x, z0,
                                                             output_layer,
-                                                            enable_none=True)
+                                                            enable_none=False)
 
         for layer_params in self.layers_parameters[:output_layer]:
             # retrieve parameters
@@ -386,7 +386,7 @@ class StepLTV(ListaBase):
             if len(initial_parameters) > layer:
                 layer_params = initial_parameters[layer]
             else:
-                layer_params = dict(step_size=np.array(1.0/self.L))
+                layer_params = dict(step_size=np.array(1.0e-8))  # XXX
 
             layer_params = self._tensorized_and_hooked_parameters(
                                         layer, layer_params, parameters_config)

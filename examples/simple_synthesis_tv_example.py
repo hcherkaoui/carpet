@@ -30,7 +30,7 @@ if __name__ == '__main__':
     m = 5
     s = 0.2
     snr = 0.0
-    all_n_layers = logspace_layers(n_layers=10, max_depth=100)
+    all_n_layers = logspace_layers(n_layers=10, max_depth=50)
     ticks_layers = np.array([0.9] + all_n_layers)
     lbda = 0.5
 
