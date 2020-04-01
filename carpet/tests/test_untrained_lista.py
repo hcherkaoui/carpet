@@ -36,7 +36,7 @@ def test_untrained_lista(lbda, parametrization, n, m):
 
     params = dict(grad=lambda z: grad(z, D, x),
                   obj=lambda z: obj(z, D, x, lbda),
-                  prox=lambda z, s: soft_thresholding(z, lbda / n, s),
+                  prox=lambda z, s: soft_thresholding(z, lbda, s),
                   x0=z0, momentum='ista', restarting=None, max_iter=n_layers,
                   step_size=step_size, early_stopping=False, debug=True,
                   verbose=0,

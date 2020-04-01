@@ -255,36 +255,40 @@ class ListaBase(torch.nn.Module):
         return self
 
     def _fit_sub_net_batch_gd(self, x, lmbd, parameters, n_layer, max_iter,
-                              max_iter_line_search=5, eps=1.0e-20):
+                              max_iter_line_search=100, eps=1.0e-20):
         """ Fit the parameters of the sub-network. """
-        z_hat = self(x, lmbd, output_layer=n_layer)
-        self.training_loss_ = [float(self._loss_fn(x, lmbd, z_hat))]
+        with torch.no_grad():
+            z_hat = self(x, lmbd, output_layer=n_layer)
+            self.training_loss_ = [float(self._loss_fn(x, lmbd, z_hat))]
         self.norm_grad_ = []
+
+        lr = 1.0
+        is_converged = False
 
         for i in range(max_iter):
 
-            lr = 1.0
+            # Gradient computation
+            z_hat = self(x, lmbd, output_layer=n_layer)
+            loss = self._loss_fn(x, lmbd, z_hat)
+            self.zero_grad()
+            loss.backward()
 
             # Back-tracking line search descent step
             for j in range(max_iter_line_search):
 
-                # Compute actual loss
-                z_hat = self(x, lmbd, output_layer=n_layer)
-                loss = self._loss_fn(x, lmbd, z_hat)
-
-                # Next gradient iterate
-                self.zero_grad()
-                loss.backward()
+                # Next gradient step
                 max_norm_grad = self._update_parameters(parameters, lr=lr)
 
                 # Compute new possible loss
-                z_hat = self(x, lmbd, output_layer=n_layer)
-                loss_value = float(self._loss_fn(x, lmbd, z_hat))
+                with torch.no_grad():
+                    z_hat = self(x, lmbd, output_layer=n_layer)
+                    loss_value = float(self._loss_fn(x, lmbd, z_hat))
 
                 # accepting the point
                 if self.training_loss_[-1] > loss_value:
                     self.training_loss_.append(loss_value)
                     self.norm_grad_.append(max_norm_grad)
+                    lr *= 2.0
                     break
                 # rejecting the point
                 else:
@@ -296,6 +300,7 @@ class ListaBase(torch.nn.Module):
                                   f"Fitting, step_size={lr:.2e}, "
                                   f"iter={i}/{max_iter}, "
                                   f"Back-tracking line search failed")
+                        is_converged = True
                         break
                     # cancel gradient step and decrease lr
                     else:
@@ -303,7 +308,7 @@ class ListaBase(torch.nn.Module):
                         lr /= 2.0
 
             # Verbosity
-            if self.verbose > 1 and self.training_loss_ and i % 50 == 0:
+            if self.verbose > 1 and i % 50 == 0:
                 print(f"\r[{self.name} - layer{n_layer}] "  # noqa: E999
                       f"Fitting, step_size={lr:.2e}, "
                       f"iter={i}/{max_iter}, "
@@ -311,14 +316,17 @@ class ListaBase(torch.nn.Module):
 
             # Stopping criterion
             if len(self.training_loss_) > 1:
-                eps_loss = self.training_loss_[-2] - self.training_loss_[-1]
-                if eps_loss < eps:
-                    if self.verbose:
-                        print(f"\r[{self.name} - layer{n_layer}] "
-                              f"Converged, step_size={lr:.2e}, ",
-                              f"iter={i}/{max_iter}, "
-                              f"loss={self.training_loss_[-1]:.2e}")
-                    break
+                if self.training_loss_[-2] - self.training_loss_[-1] < eps:
+                    is_converged = True
+
+            # break loop if converged
+            if is_converged:
+                if self.verbose:
+                    print(f"\r[{self.name} - layer{n_layer}] "
+                        f"Converged, step_size={lr:.2e}, ",
+                        f"iter={i}/{max_iter}, "
+                        f"loss={self.training_loss_[-1]:.2e}")
+                break
 
     def _update_parameters(self, parameters, lr):
         """ Parameters update step for the gradient descent. """

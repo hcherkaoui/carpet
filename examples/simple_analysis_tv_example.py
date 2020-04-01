@@ -9,7 +9,6 @@ import numpy as np
 from prox_tv import tv1_1d
 from carpet.datasets import synthetic_1d_dataset
 from carpet.analysis_loss_gradient import obj
-from carpet.lista import StepLTV
 from carpet.utils import logspace_layers
 from utils import ista_like_analy_tv, lista_like_analy_tv
 
@@ -31,11 +30,12 @@ if __name__ == '__main__':
     m = 5
     s = 0.2
     snr = 0.0
-    all_n_layers = logspace_layers(n_layers=10, max_depth=50)
+    all_n_layers = logspace_layers(n_layers=20, max_depth=150)
     ticks_layers = np.array([0.9] + all_n_layers)
     lbda = 0.5
 
-    seed = np.random.randint(0, 1000)
+    # seed = np.random.randint(0, 1000)
+    seed = 10
     print(f'Seed used = {seed}')  # noqa: E999
 
     # Generate data

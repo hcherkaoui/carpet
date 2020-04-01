@@ -358,7 +358,7 @@ ALL_LISTA = dict(lista=Lista, alista=ALista, coupled=CoupledLista,
                  hessian=HessianLista, step=StepLista)
 
 
-class StepLTV(ListaBase):
+class StepSubGradLTV(ListaBase):
     __doc__ = DOC_LISTA.format(type='LTV step',
                                problem_name='TV',
                                descr='only learn a step size'
@@ -368,8 +368,8 @@ class StepLTV(ListaBase):
                  max_iter=100, per_layer="one_shot", initial_parameters=[],
                  name="Step-LTV", ctx=None, verbose=1, device=None):
         if not learn_th:
-            print("With StepLTV, 'learn_th' should be enable, 'learn_th' "
-                  "switch to True")
+            print("With StepSubGradLTV, 'learn_th' should be enable,"
+                  "'learn_th' switch to True")
             learn_th = True
         super().__init__(D=D, n_layers=n_layers, learn_th=learn_th,
                          solver=solver, max_iter=max_iter,
@@ -423,4 +423,4 @@ class StepLTV(ListaBase):
         return (loss + lmbd * reg) / n_samples
 
 
-ALL_LTV = dict(step=StepLTV)
+ALL_LTV = dict(step=StepSubGradLTV)

@@ -109,6 +109,11 @@ def lista_like_analy_tv(x_train, x_test, D, lbda, all_n_layers, type_='lista'):
         t0_ = time.time()
         lista.fit(x_train, lmbd=lbda)
 
+        # # TODO plot here training loss
+        # import matplotlib.pyplot as plt
+        # plt.plot(lista.training_loss_)
+        # plt.show()
+
         print(f"[{type_}] model fitted in {time.time() - t0_:.1f}s")
 
         # save parameters
