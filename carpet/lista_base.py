@@ -6,10 +6,10 @@ import importlib
 import torch
 import numpy as np
 from .checks import check_tensor
-from .synthesis_loss_gradient import obj
+from .analysis_loss_gradient import obj
 
 
-AVAILABLE_CONTEXT = []
+AVAILABLE_CONTEXT = []  # a virer /!\
 
 if importlib.util.find_spec('torch'):
     AVAILABLE_CONTEXT += ['torch']
@@ -22,15 +22,6 @@ assert len(AVAILABLE_CONTEXT) > 0, (
     "{'tensorflow' | 'pytorch'}"
 )
 
-
-def symmetric_gradient(p):
-    """ Constrain the gradient to be symmetric. """
-    p.grad.data.set_(p.grad.data + p.grad.data.t())
-
-
-GRADIENT_HOOKS = {
-    'sym': symmetric_gradient,
-}
 
 DOC_LISTA = """ {type} network for the {problem_name} problem
 
@@ -127,34 +118,34 @@ class ListaBase(torch.nn.Module):
             if name in layer_parameters:
                 layer_parameters[name].data = check_tensor(value)
 
-    def fit(self, x, lmbd):
-        """ Compute the output of the network, given x and regularization lmbd
+    def fit(self, x, lbda):
+        """ Compute the output of the network, given x and regularization lbda
 
         Parameters
         ----------
         x : ndarray, shape (n_samples, n_dim)
             input of the network.
-        lmbd: float
+        lbda: float
             Regularization level for the optimization problem.
         """
         x = check_tensor(x, device=self.device)
 
         if self.solver == "gradient_descent":
-            self._fit_all_network_batch_gradient_descent(x, lmbd)
+            self._fit_all_network_batch_gradient_descent(x, lbda)
         else:
             raise NotImplementedError(f"'solver' parameter "  # noqa: E999
                                       f"should be in ['gradient_descent']"
                                       f", got {self.solver}")
         return self
 
-    def transform(self, x, lmbd, z0=None, output_layer=None):
-        """ Compute the output of the network, given x and regularization lmbd
+    def transform(self, x, lbda, z0=None, output_layer=None):
+        """ Compute the output of the network, given x and regularization lbda
 
         Parameters
         ----------
         x : ndarray, shape (n_samples, n_dim)
             input of the network.
-        lmbd: float
+        lbda: float
             Regularization level for the optimization problem.
         z0 : ndarray, shape (n_samples, n_atoms) (default: None)
             Initial point for the optimization algorithm. If None, the
@@ -165,17 +156,17 @@ class ListaBase(torch.nn.Module):
             network.
         """
         with torch.no_grad():
-            return self(x, lmbd, z0=z0,
+            return self(x, lbda, z0=z0,
                         output_layer=output_layer).cpu().numpy()
 
-    def score(self, x, lmbd, z0=None, output_layer=None):
+    def score(self, x, lbda, z0=None, output_layer=None):
         """ Compute the loss for the network's output
 
         Parameters
         ----------
         x : ndarray, shape (n_samples, n_dim)
             input of the network.
-        lmbd: float
+        lbda: float
             Regularization level for the optimization problem.
         z0 : ndarray, shape (n_samples, n_atoms) (default: None)
             Initial point for the optimization algorithm. If None, the
@@ -187,17 +178,17 @@ class ListaBase(torch.nn.Module):
         """
         x = check_tensor(x, device=self.device)
         with torch.no_grad():
-            return self._loss_fn(x, lmbd, self(x, lmbd, z0=z0,
+            return self._loss_fn(x, lbda, self(x, lbda, z0=z0,
                                  output_layer=output_layer)).cpu().numpy()
 
-    def compute_loss(self, x, lmbd, z0=None):
+    def compute_loss(self, x, lbda, z0=None):
         """ Compute the loss for the network's output at each layer
 
         Parameters
         ----------
         x : ndarray, shape (n_samples, n_dim)
             input of the network.
-        lmbd: float
+        lbda: float
             Regularization level for the optimization problem.
         z0 : ndarray, shape (n_samples, n_atoms) (default: None)
             Initial point for the optimization algorithm. If None, the
@@ -208,8 +199,8 @@ class ListaBase(torch.nn.Module):
         with torch.no_grad():
             for output_layer in range(self.n_layers):
                 loss.append(self._loss_fn(
-                    x, lmbd,
-                    self(x, lmbd, z0=z0, output_layer=output_layer + 1)
+                    x, lbda,
+                    self(x, lbda, z0=z0, output_layer=output_layer + 1)
                     ).cpu().numpy())
         return np.array(loss)
 
@@ -218,12 +209,12 @@ class ListaBase(torch.nn.Module):
         raise NotImplementedError('ListaBase is a virtual class and should '
                                   'not be instanciate')
 
-    def _fit_all_network_batch_gradient_descent(self, x, lmbd):
+    def _fit_all_network_batch_gradient_descent(self, x, lbda):
         """ Fit the parameters of the network. """
         if self.per_layer == 'one_shot':
             params = [p for layer_parameters in self.layers_parameters
                       for p in layer_parameters.values()]
-            self._fit_sub_net_batch_gd(x, lmbd, params, self.n_layers,
+            self._fit_sub_net_batch_gd(x, lbda, params, self.n_layers,
                                        self.max_iter)
 
         elif self.per_layer == 'recursive':
@@ -233,7 +224,7 @@ class ListaBase(torch.nn.Module):
             for n_layer, max_iter in zip(layers, max_iters):
                 params = [p for lp in self.layers_parameters
                           for p in lp.values()]
-                self._fit_sub_net_batch_gd(x, lmbd, params, n_layer, max_iter)
+                self._fit_sub_net_batch_gd(x, lbda, params, n_layer, max_iter)
 
         elif self.per_layer == 'greedy':
             layers = range(1, self.n_layers + 1)
@@ -242,7 +233,7 @@ class ListaBase(torch.nn.Module):
             for n_layer, max_iter in zip(layers, max_iters):
                 params = [p for lp in self.layers_parameters[:n_layer]
                           for p in lp.values()]
-                self._fit_sub_net_batch_gd(x, lmbd, params, n_layer, max_iter)
+                self._fit_sub_net_batch_gd(x, lbda, params, n_layer, max_iter)
 
         else:
             raise ValueError(f"per_layer should belong to ['recursive', "
@@ -254,92 +245,84 @@ class ListaBase(torch.nn.Module):
 
         return self
 
-    def _fit_sub_net_batch_gd(self, x, lmbd, parameters, n_layer, max_iter,
-                              max_iter_line_search=100, eps=1.0e-20):
+    def _fit_sub_net_batch_gd(self, x, lbda, parameters, n_layer, max_iter,
+                              max_iter_line_search=10, eps=1.0e-20):
         """ Fit the parameters of the sub-network. """
         with torch.no_grad():
-            z_hat = self(x, lmbd, output_layer=n_layer)
-            self.training_loss_ = [float(self._loss_fn(x, lmbd, z_hat))]
+            z_hat = self(x, lbda, output_layer=n_layer)
+            self.training_loss_ = [float(self._loss_fn(x, lbda, z_hat))]
         self.norm_grad_ = []
 
+        verbose_rate = 50
         lr = 1.0
         is_converged = False
 
         for i in range(max_iter):
 
+            # Verbosity
+            if self.verbose > 1 and i % verbose_rate == 0:
+                print(f"\r[{self.name} - layer{n_layer}] "  # noqa: E999
+                      f"Fitting, step_size={lr:.2e}, "
+                      f"iter={i}/{max_iter}, "
+                      f"loss={self.training_loss_[-1]:.3e}")
+
             # Gradient computation
-            z_hat = self(x, lmbd, output_layer=n_layer)
-            loss = self._loss_fn(x, lmbd, z_hat)
-            self.zero_grad()
-            loss.backward()
+            self._update_gradient(x, lbda, n_layer)
 
             # Back-tracking line search descent step
-            for j in range(max_iter_line_search):
+            for _ in range(max_iter_line_search): 
 
                 # Next gradient step
                 max_norm_grad = self._update_parameters(parameters, lr=lr)
 
                 # Compute new possible loss
                 with torch.no_grad():
-                    z_hat = self(x, lmbd, output_layer=n_layer)
-                    loss_value = float(self._loss_fn(x, lmbd, z_hat))
+                    z_hat = self(x, lbda, output_layer=n_layer)
+                    loss_value = float(self._loss_fn(x, lbda, z_hat))
 
                 # accepting the point
                 if self.training_loss_[-1] > loss_value:
                     self.training_loss_.append(loss_value)
                     self.norm_grad_.append(max_norm_grad)
-                    lr *= 2.0
+                    lr *= 2**(max_iter_line_search / 4)
                     break
                 # rejecting the point
                 else:
-                    # lr is too low anyway
-                    if lr < 1.0e-20:
-                        if self.verbose > 1:
-                            print(f"\r[{self.name} - "  # noqa: E999
-                                  f"layer{n_layer}] "
-                                  f"Fitting, step_size={lr:.2e}, "
-                                  f"iter={i}/{max_iter}, "
-                                  f"Back-tracking line search failed")
-                        is_converged = True
-                        break
-                    # cancel gradient step and decrease lr
-                    else:
-                        _ = self._update_parameters(parameters, lr=-lr)
-                        lr /= 2.0
-
-            # Verbosity
-            if self.verbose > 1 and i % 50 == 0:
-                print(f"\r[{self.name} - layer{n_layer}] "  # noqa: E999
-                      f"Fitting, step_size={lr:.2e}, "
-                      f"iter={i}/{max_iter}, "
-                      f"loss={self.training_loss_[-1]:.2e}")
+                    _ = self._update_parameters(parameters, lr=-lr)
+                    lr /= 2.0
 
             # Stopping criterion
+            if lr < 1e-20:
+                is_converged = True
             if len(self.training_loss_) > 1:
                 if self.training_loss_[-2] - self.training_loss_[-1] < eps:
                     is_converged = True
 
-            # break loop if converged
             if is_converged:
                 if self.verbose:
                     print(f"\r[{self.name} - layer{n_layer}] "
-                        f"Converged, step_size={lr:.2e}, ",
+                        f"Early-stop, step_size={lr:.2e}, ",
                         f"iter={i}/{max_iter}, "
-                        f"loss={self.training_loss_[-1]:.2e}")
+                        f"final-loss={self.training_loss_[-1]:.3e}")
                 break
+
+        assert np.all(np.diff(self.training_loss_) < 0.0), "During training loss function has increased!"
+
+    def _update_gradient(self, x, lbda, n_layer):
+        """ Gradient update. """
+        # init gradient
+        self.zero_grad()
+        # init back-propagation
+        z_hat = self(x, lbda, output_layer=n_layer)
+        loss = self._loss_fn(x, lbda, z_hat)
+        loss.backward()
 
     def _update_parameters(self, parameters, lr):
         """ Parameters update step for the gradient descent. """
         self._saved_gradient = []
+        max_norm_grad = 0.0
 
-        # compute gradient
-        for hook, list_params in self.pre_gradient_hooks.items():
-            for p in list_params:
-                if p.grad is not None:
-                    GRADIENT_HOOKS[hook](p)
-
-        max_norm_grad = 0
-        for param in parameters:  # do a gradient step for each parameter
+        for param in parameters:
             if param.grad is not None:
                 # do a descent step
                 param.data.add_(-lr, param.grad.data)

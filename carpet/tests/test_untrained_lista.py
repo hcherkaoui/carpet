@@ -12,8 +12,7 @@ from carpet.synthesis_loss_gradient import grad, obj
 @pytest.mark.parametrize('lbda', [0.0, 0.5])
 @pytest.mark.parametrize('n', [1, 50])
 @pytest.mark.parametrize('m', [10, 20])
-@pytest.mark.parametrize('parametrization', ['lista', 'coupled', 'hessian',
-                                             'step'])
+@pytest.mark.parametrize('parametrization', ['lista', 'coupled', 'step'])
 def test_untrained_lista(lbda, parametrization, n, m):
     """ Test the gradient of z. """
     rng = check_random_state(None)
@@ -26,11 +25,11 @@ def test_untrained_lista(lbda, parametrization, n, m):
     z0_ = check_tensor(z0, 'cpu')
 
     lista = ALL_LISTA[parametrization](D=D, n_layers=n_layers, device='cpu')
-    z_hat_untrained_lista = lista.transform(x=x, lmbd=lbda, z0=z0_,
+    z_hat_untrained_lista = lista.transform(x=x, lbda=lbda, z0=z0_,
                                             output_layer=n_layers)
     loss_untrained_lista = [obj(z=z0, D=D, x=x, lbda=lbda)]
     for n_layer_ in range(1, n_layers + 1):
-        z_hat = lista.transform(x=x, lmbd=lbda, z0=z0_, output_layer=n_layer_)
+        z_hat = lista.transform(x=x, lbda=lbda, z0=z0_, output_layer=n_layer_)
         loss_untrained_lista.append(obj(z=z_hat, D=D, x=x, lbda=lbda))
     loss_untrained_lista = np.array(loss_untrained_lista)
 

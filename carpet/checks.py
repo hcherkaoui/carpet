@@ -28,12 +28,12 @@ def check_random_state(seed):
                      f'numpy.random.RandomState instance')
 
 
-def check_tensor(x, device=None):
+def check_tensor(x, device=None, dtype=torch.float64):
     """ Force x to be a torch.Tensor. """
     if isinstance(x, np.ndarray) or type(x) in [int, float]:
-        x = torch.Tensor(x, device=device)
+        x = torch.tensor(x, device=device, dtype=dtype)
     elif isinstance(x, torch.Tensor):
-        return x.to(device=device)
+        return x.to(device=device, dtype=dtype)
     else:
         ValueError(f"Invalid type for x, got {type(x)}")
     return x

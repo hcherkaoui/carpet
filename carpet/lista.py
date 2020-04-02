@@ -47,7 +47,7 @@ class Lista(ListaBase):
                                         layer, layer_params, parameters_config)
             self.layers_parameters += [layer_params]
 
-    def forward(self, x, lmbd, z0=None, output_layer=None):
+    def forward(self, x, lbda, z0=None, output_layer=None):
         """ Forward pass of the network. """
         # initialize the descent
         z0 = np.zeros_like(np.array(x).dot(self.D.T)) if z0 is None else z0
@@ -64,11 +64,11 @@ class Lista(ListaBase):
 
             # apply one 'iteration'
             z_hat = (z_hat.matmul(Wz) + x.matmul(Wx))
-            z_hat = soft_thresholding(z_hat, lmbd, th)
+            z_hat = soft_thresholding(z_hat, lbda, th)
 
         return z_hat
 
-    def _loss_fn(self, x, lmbd, z_hat):
+    def _loss_fn(self, x, lbda, z_hat):
         """ Target loss function. """
         n_samples = x.shape[0]
         x = check_tensor(x, device=self.device)
@@ -76,7 +76,7 @@ class Lista(ListaBase):
         residual = z_hat.matmul(self.D_) - x
         loss = 0.5 * (residual * residual).sum()
         reg = torch.abs(z_hat).sum()
-        return (loss + lmbd * reg) / n_samples
+        return (loss + lbda * reg) / n_samples
 
 
 class CoupledLista(ListaBase):
@@ -114,7 +114,7 @@ class CoupledLista(ListaBase):
                                         layer, layer_params, parameters_config)
             self.layers_parameters += [layer_params]
 
-    def forward(self, x, lmbd, z0=None, output_layer=None):
+    def forward(self, x, lbda, z0=None, output_layer=None):
         """ Forward pass of the network. """
         # initialize the descent
         z0 = np.zeros_like(np.array(x).dot(self.D.T)) if z0 is None else z0
@@ -132,11 +132,11 @@ class CoupledLista(ListaBase):
             # apply one 'iteration'
             residual = z_hat.matmul(self.D_) - x
             z_hat = z_hat - residual.matmul(W)
-            z_hat = soft_thresholding(z_hat, lmbd, th)
+            z_hat = soft_thresholding(z_hat, lbda, th)
 
         return z_hat
 
-    def _loss_fn(self, x, lmbd, z_hat):
+    def _loss_fn(self, x, lbda, z_hat):
         """ Target loss function. """
         n_samples = x.shape[0]
         x = check_tensor(x, device=self.device)
@@ -144,7 +144,7 @@ class CoupledLista(ListaBase):
         residual = z_hat.matmul(self.D_) - x
         loss = 0.5 * (residual * residual).sum()
         reg = torch.abs(z_hat).sum()
-        return (loss + lmbd * reg) / n_samples
+        return (loss + lbda * reg) / n_samples
 
 
 class ALista(ListaBase):
@@ -185,7 +185,7 @@ class ALista(ListaBase):
                                         layer, layer_params, parameters_config)
             self.layers_parameters += [layer_params]
 
-    def forward(self, x, lmbd, z0=None, output_layer=None):
+    def forward(self, x, lbda, z0=None, output_layer=None):
         """ Forward pass of the network. """
         # initialize the descent
         z0 = np.zeros_like(np.array(x).dot(self.D.T)) if z0 is None else z0
@@ -203,11 +203,11 @@ class ALista(ListaBase):
             # apply one 'iteration'
             residual = z_hat.matmul(self.D_) - x
             z_hat = z_hat - residual.matmul(W)
-            z_hat = soft_thresholding(z_hat, lmbd, th)
+            z_hat = soft_thresholding(z_hat, lbda, th)
 
         return z_hat
 
-    def _loss_fn(self, x, lmbd, z_hat):
+    def _loss_fn(self, x, lbda, z_hat):
         """ Target loss function. """
         n_samples = x.shape[0]
         x = check_tensor(x, device=self.device)
@@ -215,76 +215,7 @@ class ALista(ListaBase):
         residual = z_hat.matmul(self.D_) - x
         loss = 0.5 * (residual * residual).sum()
         reg = torch.abs(z_hat).sum()
-        return (loss + lmbd * reg) / n_samples
-
-
-class HessianLista(ListaBase):
-    __doc__ = DOC_LISTA.format(
-                type='L-ISTA hessian',
-                problem_name='LASSO',
-                descr='one weight parametrization as a quasi newton technique'
-                            )
-
-    def __init__(self, D, n_layers, learn_th=True, solver="gradient_descent",
-                 max_iter=100, per_layer="recursive", initial_parameters=[],
-                 name="Hessian-LISTA", ctx=None, verbose=1, device=None):
-        super().__init__(D=D, n_layers=n_layers, learn_th=learn_th,
-                         solver=solver, max_iter=max_iter, per_layer=per_layer,
-                         initial_parameters=initial_parameters, name=name,
-                         ctx=ctx, verbose=verbose, device=device)
-
-    def _init_network_parameters(self, initial_parameters=[]):
-        """ Initialize the parameters of the network. """
-        n_atoms = self.D.shape[0]
-        I_k = np.eye(n_atoms)
-
-        parameters_config = dict(threshold=[], W_hessian=['sym'])
-
-        self.layers_parameters = []
-        for layer in range(self.n_layers):
-            if len(initial_parameters) > layer:
-                layer_params = initial_parameters[layer]
-            else:
-                layer_params = {}
-                if self.learn_th:
-                    layer_params['threshold'] = np.ones(n_atoms) / self.L
-                layer_params['W_hessian'] = I_k / self.L
-
-            layer_params = self._tensorized_and_hooked_parameters(
-                                        layer, layer_params, parameters_config)
-            self.layers_parameters += [layer_params]
-
-    def forward(self, x, lmbd, z0=None, output_layer=None):
-        """ Forward pass of the network. """
-        # initialize the descent
-        z0 = np.zeros_like(np.array(x).dot(self.D.T)) if z0 is None else z0
-        # check inputs
-        x, z_hat, output_layer = self._check_forward_inputs(x, z0,
-                                                            output_layer,
-                                                            enable_none=False)
-
-        for layer_params in self.layers_parameters[:output_layer]:
-            # retrieve parameters
-            th = layer_params['threshold']
-            step_size = layer_params.get('step_size', 1.)
-            W = self.D_.t().matmul(layer_params['W_hessian']) * step_size
-
-            # apply one 'iteration'
-            residual = z_hat.matmul(self.D_) - x
-            z_hat = z_hat - residual.matmul(W)
-            z_hat = soft_thresholding(z_hat, lmbd, th)
-
-        return z_hat
-
-    def _loss_fn(self, x, lmbd, z_hat):
-        """ Target loss function. """
-        n_samples = x.shape[0]
-        x = check_tensor(x, device=self.device)
-        z_hat = check_tensor(z_hat, device=self.device)
-        residual = z_hat.matmul(self.D_) - x
-        loss = 0.5 * (residual * residual).sum()
-        reg = torch.abs(z_hat).sum()
-        return (loss + lmbd * reg) / n_samples
+        return (loss + lbda * reg) / n_samples
 
 
 class StepLista(ListaBase):
@@ -321,7 +252,7 @@ class StepLista(ListaBase):
                                         layer, layer_params, parameters_config)
             self.layers_parameters += [layer_params]
 
-    def forward(self, x, lmbd, z0=None, output_layer=None):
+    def forward(self, x, lbda, z0=None, output_layer=None):
         """ Forward pass of the network. """
         # initialize the descent
         z0 = np.zeros_like(np.array(x).dot(self.D.T)) if z0 is None else z0
@@ -339,11 +270,11 @@ class StepLista(ListaBase):
             # apply one 'iteration'
             residual = z_hat.matmul(self.D_) - x
             z_hat = z_hat - residual.matmul(W)
-            z_hat = soft_thresholding(z_hat, lmbd, th)
+            z_hat = soft_thresholding(z_hat, lbda, th)
 
         return z_hat
 
-    def _loss_fn(self, x, lmbd, z_hat):
+    def _loss_fn(self, x, lbda, z_hat):
         """ Target loss function. """
         n_samples = x.shape[0]
         x = check_tensor(x, device=self.device)
@@ -351,11 +282,11 @@ class StepLista(ListaBase):
         residual = z_hat.matmul(self.D_) - x
         loss = 0.5 * (residual * residual).sum()
         reg = torch.abs(z_hat).sum()
-        return (loss + lmbd * reg) / n_samples
+        return (loss + lbda * reg) / n_samples
 
 
 ALL_LISTA = dict(lista=Lista, alista=ALista, coupled=CoupledLista,
-                 hessian=HessianLista, step=StepLista)
+                 step=StepLista)
 
 
 class StepSubGradLTV(ListaBase):
@@ -392,7 +323,7 @@ class StepSubGradLTV(ListaBase):
                                         layer, layer_params, parameters_config)
             self.layers_parameters += [layer_params]
 
-    def forward(self, x, lmbd, z0=None, output_layer=None):
+    def forward(self, x, lbda, z0=None, output_layer=None):
         """ Forward pass of the network. """
         x, z_hat, output_layer = self._check_forward_inputs(x, z0,
                                                             output_layer,
@@ -408,11 +339,11 @@ class StepSubGradLTV(ListaBase):
             else:
                 residual = z_hat - x
                 reg = z_hat.matmul(self.D_).sign().matmul(self.D_.t())
-                z_hat = z_hat - step_size * (residual + lmbd * reg)
+                z_hat = z_hat - step_size * (residual + lbda * reg)
 
         return z_hat
 
-    def _loss_fn(self, x, lmbd, z_hat):
+    def _loss_fn(self, x, lbda, z_hat):
         """ Target loss function. """
         n_samples = x.shape[0]
         x = check_tensor(x, device=self.device)
@@ -420,7 +351,7 @@ class StepSubGradLTV(ListaBase):
         residual = z_hat - x
         loss = 0.5 * (residual * residual).sum()
         reg = torch.abs(z_hat.matmul(self.D_)).sum()
-        return (loss + lmbd * reg) / n_samples
+        return (loss + lbda * reg) / n_samples
 
 
 ALL_LTV = dict(step=StepSubGradLTV)

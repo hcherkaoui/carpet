@@ -17,4 +17,4 @@ def test_soft_thresholding(seed, shape, lbda):
                                           lbda, step_size=1.0).numpy()
     prox_z = soft_thresholding_numpy(z, lbda, step_size=1.0)
 
-    np.testing.assert_allclose(prox_z_ref, prox_z, rtol=1e-5, atol=1e-3)
+    np.testing.assert_allclose(prox_z_ref, prox_z, rtol=1e-2)

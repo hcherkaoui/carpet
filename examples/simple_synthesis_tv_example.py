@@ -25,13 +25,13 @@ if __name__ == '__main__':
         os.makedirs(ploting_dir)
 
     # Define variables
-    n_samples = 2000
+    n_samples = 3000
     n_samples_testing = 1000
-    m = 5
+    m = 20
     s = 0.2
     snr = 0.0
-    all_n_layers = logspace_layers(n_layers=10, max_depth=50)
-    ticks_layers = np.array([0.9] + all_n_layers)
+    all_n_layers = logspace_layers(n_layers=10, max_depth=100)
+    ticks_layers = np.array([0] + all_n_layers)
     lbda = 0.5
 
     seed = np.random.randint(0, 1000)
@@ -74,11 +74,12 @@ if __name__ == '__main__':
     plt.figure(f"[{__file__}] Train loss function", figsize=(6, 4))
     for name, train_loss in zip(names, l_train_loss):
         ls = '--' if name == 'ISTA-iterative' else '-'
-        plt.loglog(ticks_layers, train_loss - (min_train_loss - eps_plots),
+        plt.loglog(ticks_layers + 1, train_loss - (min_train_loss - eps_plots),
                    ls=ls, lw=lw, label=name)
     plt.legend(bbox_to_anchor=(1.05, 1.0), loc='upper left', borderaxespad=0.0,
                fontsize=12)
     plt.grid()
+    plt.xticks(ticks_layers + 1, ticks_layers)
     plt.xlabel('Layers [-]', fontsize=15)
     plt.ylabel('$F(.) - F(z^*)$', fontsize=15)
     plt.title('Loss function evolution\non training set', fontsize=15)
@@ -91,11 +92,12 @@ if __name__ == '__main__':
     plt.figure(f"[{__file__}] Test loss function", figsize=(6, 4))
     for name, test_loss in zip(names, l_test_loss):
         ls = '--' if name == 'ISTA-iterative' else '-'
-        plt.loglog(ticks_layers, test_loss - (min_test_loss - eps_plots),
+        plt.loglog(ticks_layers + 1, test_loss - (min_test_loss - eps_plots),
                    ls=ls, lw=lw, label=name)
     plt.legend(bbox_to_anchor=(1.05, 1.0), loc='upper left', borderaxespad=0.0,
                fontsize=12)
     plt.grid()
+    plt.xticks(ticks_layers + 1, ticks_layers)
     plt.xlabel("Layers [-]", fontsize=15)
     plt.ylabel("$F(.) - F(z^*)$", fontsize=15)
     plt.title('Loss function evolution\non testing set', fontsize=15)

@@ -26,12 +26,12 @@ def test_init_parameters(seed, m, n, lbda, parametrization):
 
     lista_1 = ALL_LISTA[parametrization](D=D, n_layers=n_layers, max_iter=10,
                                          device='cpu', verbose=0)
-    lista_1.fit(x_tensor, lmbd=lbda)
+    lista_1.fit(x_tensor, lbda=lbda)
     parameters = lista_1.export_parameters()
 
     loss_lista_1 = []
     for n_layer_ in range(n_layers + 1):
-        z_hat_1 = lista_1.transform(x=x_tensor, lmbd=lbda, z0=z0_tensor,
+        z_hat_1 = lista_1.transform(x=x_tensor, lbda=lbda, z0=z0_tensor,
                                     output_layer=n_layer_)
         loss_lista_1.append(obj(z=z_hat_1, D=D, x=x, lbda=lbda))
     loss_lista_1 = np.array(loss_lista_1)
@@ -44,11 +44,10 @@ def test_init_parameters(seed, m, n, lbda, parametrization):
 
     loss_lista_2 = []
     for n_layer_ in range(n_layers + 1):
-        z_hat_2 = lista_2.transform(x=x_tensor, lmbd=lbda, z0=z0_tensor,
+        z_hat_2 = lista_2.transform(x=x_tensor, lbda=lbda, z0=z0_tensor,
                                     output_layer=n_layer_)
         loss_lista_2.append(obj(z=z_hat_2, D=D, x=x, lbda=lbda))
     loss_lista_2 = np.array(loss_lista_2)
 
-    np.testing.assert_allclose(z_hat_1, z_hat_2, rtol=1e-4, atol=1e-3)
-    np.testing.assert_allclose(loss_lista_1, loss_lista_2, rtol=1e-4,
-                               atol=1e-3)
+    np.testing.assert_allclose(z_hat_1, z_hat_2)
+    np.testing.assert_allclose(loss_lista_1, loss_lista_2)
