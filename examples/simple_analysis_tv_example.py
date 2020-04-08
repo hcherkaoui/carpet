@@ -10,7 +10,7 @@ from prox_tv import tv1_1d
 from carpet.datasets import synthetic_1d_dataset
 from carpet.analysis_loss_gradient import obj
 from carpet.utils import logspace_layers
-from utils import ista_like_analy_tv, lista_like_analy_tv
+from utils import chambolle_tv, lista_like_analy_tv
 
 
 if __name__ == '__main__':
@@ -30,7 +30,7 @@ if __name__ == '__main__':
     m = 20
     s = 0.2
     snr = 0.0
-    all_n_layers = logspace_layers(n_layers=10, max_depth=100)
+    all_n_layers = logspace_layers(n_layers=30, max_depth=300)
     ticks_layers = np.array([0] + all_n_layers)
     lbda = 0.5
 
@@ -46,9 +46,27 @@ if __name__ == '__main__':
     x_test = x[:n_samples_testing, :]
 
     l_train_loss, l_test_loss = [], []
-    names = ['LTV-step', 'Sub-gradient']
-    funcs_bench = [lista_like_analy_tv, ista_like_analy_tv]
-    l_type_ = ['step', 'ista']
+    names = ['LTV Chambolle-Step',
+            #  'LTV-SubGradient-step',
+             'LTV Chambolle-Coupled',
+             'Chambolle neural-net',
+             'Chambolle iterative',
+             'Fast Chambolle iterative',
+             ]
+    funcs_bench = [lista_like_analy_tv,
+                #    lista_like_analy_tv,
+                   lista_like_analy_tv,
+                   lista_like_analy_tv,
+                   chambolle_tv,
+                   chambolle_tv,
+                   ]
+    l_type_ = ['stepchambolle',
+            #    'stepsubgradient',
+               'coupledchambolle',
+               'chambolle',
+               'chambolle',
+               'fast-chambolle',
+               ]
     for name, func_bench, type_ in zip(names, funcs_bench, l_type_):
         print(f"[main script] running {name}")
         print("-" * 80)
@@ -72,8 +90,8 @@ if __name__ == '__main__':
     # Plotting train loss function
     plt.figure(f"[{__file__}] Train loss function", figsize=(6, 4))
     for name, train_loss in zip(names, l_train_loss):
-        ls = '--' if name == 'Sub-gradient' else '-'
-        plt.loglog(ticks_layers, train_loss - (min_train_loss - eps_plots),
+        ls = '--' if 'iterative' in name else '-'
+        plt.loglog(ticks_layers + 1, train_loss - (min_train_loss - eps_plots),
                    ls=ls, lw=lw, label=name)
     plt.legend(bbox_to_anchor=(1.05, 1.0), loc='upper left', borderaxespad=0.0,
                fontsize=12)
@@ -90,7 +108,7 @@ if __name__ == '__main__':
     # Plotting test loss function
     plt.figure(f"[{__file__}] Test loss function", figsize=(6, 4))
     for name, test_loss in zip(names, l_test_loss):
-        ls = '--' if name == 'Sub-gradient' else '-'
+        ls = '--' if 'iterative' in name else '-'
         plt.loglog(ticks_layers + 1, test_loss - (min_test_loss - eps_plots),
                    ls=ls, lw=lw, label=name)
     plt.legend(bbox_to_anchor=(1.05, 1.0), loc='upper left', borderaxespad=0.0,

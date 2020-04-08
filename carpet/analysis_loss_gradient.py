@@ -21,6 +21,5 @@ def obj(z, D, x, lbda):
     """ Cost func for the TV-1d synthesis formulation. """
     z = np.atleast_2d(z)
     n_samples = z.shape[0]
-    residual = (z - x).ravel()
     cost = 0.5 * np.sum(np.square(z - x)) + lbda * np.sum(np.abs(z.dot(D)))
     return cost / n_samples

@@ -2,25 +2,9 @@
 # Authors: Hamza Cherkaoui <hamza.cherkaoui@inria.fr>
 # License: BSD (3-clause)
 
-import importlib
 import torch
 import numpy as np
 from .checks import check_tensor
-from .analysis_loss_gradient import obj
-
-
-AVAILABLE_CONTEXT = []  # a virer /!\
-
-if importlib.util.find_spec('torch'):
-    AVAILABLE_CONTEXT += ['torch']
-
-if importlib.util.find_spec('tensorflow'):
-    AVAILABLE_CONTEXT += ['tf']
-
-assert len(AVAILABLE_CONTEXT) > 0, (
-    "Should have at least one deep-learning framework in "
-    "{'tensorflow' | 'pytorch'}"
-)
 
 
 DOC_LISTA = """ {type} network for the {problem_name} problem
@@ -57,12 +41,6 @@ class ListaBase(torch.nn.Module):
     def __init__(self, D, n_layers, learn_th=True, solver="gradient_descent",
                  max_iter=100, per_layer='recursive', initial_parameters=[],
                  name="LISTA", ctx=None, verbose=1, device=None):
-        if ctx:
-            msg = "Context {} is not available on this computer."
-            assert ctx in AVAILABLE_CONTEXT, msg.format(ctx)
-        else:
-            ctx = AVAILABLE_CONTEXT[0]
-
         self.name = name
         self._ctx = ctx
         self.device = device
@@ -257,7 +235,17 @@ class ListaBase(torch.nn.Module):
         lr = 1.0
         is_converged = False
 
-        for i in range(max_iter):
+        i = 0
+
+        if self.verbose > 1:
+            print(f"\r[{self.name} - layer{n_layer}] "  # noqa: E999
+                  f"Fitting, step_size={lr:.2e}, "
+                  f"iter={i}/{max_iter}, "
+                  f"loss={self.training_loss_[-1]:.3e}")
+
+        while i < max_iter:
+
+            i += 1
 
             # Verbosity
             if self.verbose > 1 and i % verbose_rate == 0:
@@ -270,7 +258,7 @@ class ListaBase(torch.nn.Module):
             self._update_gradient(x, lbda, n_layer)
 
             # Back-tracking line search descent step
-            for _ in range(max_iter_line_search): 
+            for _ in range(max_iter_line_search):
 
                 # Next gradient step
                 max_norm_grad = self._update_parameters(parameters, lr=lr)
@@ -298,15 +286,19 @@ class ListaBase(torch.nn.Module):
                 if self.training_loss_[-2] - self.training_loss_[-1] < eps:
                     is_converged = True
 
+            # Early stopping
             if is_converged:
-                if self.verbose:
-                    print(f"\r[{self.name} - layer{n_layer}] "
-                        f"Early-stop, step_size={lr:.2e}, ",
-                        f"iter={i}/{max_iter}, "
-                        f"final-loss={self.training_loss_[-1]:.3e}")
                 break
 
-        assert np.all(np.diff(self.training_loss_) < 0.0), "During training loss function has increased!"
+        if self.verbose:
+            converging_status = '' if is_converged else 'not '
+            print(f"\r[{self.name} - layer{n_layer}] Finished "
+                  f"({converging_status}converged), step_size={lr:.2e}, "
+                  f"iter={i}/{max_iter}, "
+                  f"final-loss={self.training_loss_[-1]:.6e}")
+
+        msg = "Loss function has increased during training!"
+        assert np.all(np.diff(self.training_loss_) < 0.0), msg
 
     def _update_gradient(self, x, lbda, n_layer):
         """ Gradient update. """

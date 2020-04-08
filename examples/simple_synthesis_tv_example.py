@@ -73,7 +73,7 @@ if __name__ == '__main__':
     # Plotting train loss function
     plt.figure(f"[{__file__}] Train loss function", figsize=(6, 4))
     for name, train_loss in zip(names, l_train_loss):
-        ls = '--' if name == 'ISTA-iterative' else '-'
+        ls = '--' if 'iterative' in name else '-'
         plt.loglog(ticks_layers + 1, train_loss - (min_train_loss - eps_plots),
                    ls=ls, lw=lw, label=name)
     plt.legend(bbox_to_anchor=(1.05, 1.0), loc='upper left', borderaxespad=0.0,

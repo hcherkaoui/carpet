@@ -21,18 +21,19 @@ def lista_like_synth_tv(x_train, x_test, D, lbda, all_n_layers, type_='lista'):
     previous_parameters = None
     train_loss = [obj_synth(z0_train, D, x_train, lbda)]
     test_loss = [obj_synth(z0_test, D, x_test, lbda)]
+
     for n_layers in all_n_layers:
 
         # declare network
         parametrization = 'lista' if type_ == 'ista' else type_
         if previous_parameters is not None:
             lista = ALL_LISTA[parametrization](D=D, n_layers=n_layers,
-                                max_iter=100, device='cpu', name=type_,
+                                max_iter=50, device='cpu', name=type_,
                                 initial_parameters=previous_parameters,
                                 verbose=1)
         else:
             lista = ALL_LISTA[parametrization](D=D, n_layers=n_layers,
-                              max_iter=100, device='cpu', name=type_,
+                              max_iter=50, device='cpu', name=type_,
                               verbose=1)
 
         t0_ = time.time()
@@ -87,27 +88,28 @@ def lista_like_analy_tv(x_train, x_test, D, lbda, all_n_layers, type_='lista'):
     """ LISTA-like solver for analysis TV problem. """
     previous_parameters = None
 
-    z0_train = np.zeros_like(x_train)
-    z0_test = np.zeros_like(x_test)
-
-    train_loss_init = obj_analy(z0_train, D, x_train, lbda)
-    test_loss_init = obj_analy(z0_test, D, x_test, lbda)
+    train_loss_init = obj_analy(x_train, D, x_train, lbda)
+    test_loss_init = obj_analy(x_test, D, x_test, lbda)
     train_loss, test_loss = [train_loss_init], [test_loss_init]
+
     for n_layers in all_n_layers:
 
         # declare network
+        parametrization = 'stepchambolle' if type_ == 'chambolle' else type_
         if previous_parameters is not None:
-            lista = ALL_LTV[type_](D=D, n_layers=n_layers, max_iter=100,
-                                device='cpu', name=type_, per_layer='one_shot',
+            lista = ALL_LTV[parametrization](D=D, n_layers=n_layers,
+                                max_iter=50, device='cpu', name=type_,
+                                per_layer='one_shot',
                                 initial_parameters=previous_parameters,
                                 verbose=10)
         else:
-            lista = ALL_LTV[type_](D=D, n_layers=n_layers, max_iter=100,
-                                device='cpu', name=type_, per_layer='one_shot',
-                                verbose=10)
+            lista = ALL_LTV[parametrization](D=D, n_layers=n_layers,
+                                max_iter=50, device='cpu', name=type_,
+                                per_layer='one_shot', verbose=10)
 
         t0_ = time.time()
-        lista.fit(x_train, lbda=lbda)
+        if type_ != 'chambolle':  # train network
+            lista.fit(x_train, lbda=lbda)
 
         print(f"[{type_}] model fitted in {time.time() - t0_:.1f}s")
 
@@ -116,34 +118,55 @@ def lista_like_analy_tv(x_train, x_test, D, lbda, all_n_layers, type_='lista'):
 
         # get train and test error
         z_train = lista.transform(x_train, lbda, output_layer=n_layers)
-        train_loss.append(obj_analy(z_train, D, x_train, lbda))
-
         z_test = lista.transform(x_test, lbda, output_layer=n_layers)
+        if 'chambolle' in type_:
+            z_train = x_train - lbda * z_train.dot(D.T)
+            z_test = x_test - lbda * z_test.dot(D.T)
+        train_loss.append(obj_analy(z_train, D, x_train, lbda))
         test_loss.append(obj_analy(z_test, D, x_test, lbda))
 
     return np.array(train_loss), np.array(test_loss)
 
 
-def ista_like_analy_tv(x_train, x_test, D, lbda, all_n_layers, type_='ista'):
-    """ ISTA-like solver for analysis TV problem. """
+def chambolle_tv(x_train, x_test, D, lbda, all_n_layers, type_):
+    """ Chambolle solver for analysis TV problem. """
     max_iter = all_n_layers[-1]
-    step_size = 1.0e-8
+    step_size = 1.0 / np.linalg.norm(D.dot(D.T), ord=2)
+    momentum = 'ista' if type_ == 'chambolle' else 'fista'
+
+    n_train_samples = x_train.shape[0]
+    n_test_samples = x_test.shape[0]
+    n_dim = D.shape[1]
+
+    def _grad(v, D, x, lbda):
+        return (v.dot(D.T) - x / lbda).dot(D)
+
+    def _obj(v, D, x, lbda):
+        v = np.atleast_2d(v)
+        z = x - lbda * v.dot(D.T)  # switch to primal formulation
+        n_samples = z.shape[0]
+        cost = 0.5 * np.sum(np.square(z - x)) + lbda * np.sum(np.abs(z.dot(D)))
+        return cost / n_samples
+
+    def _prox(z, step_size):
+        return np.clip(z, -1.0, 1.0)
 
     params = dict(
-            grad=lambda z: subgrad_analy(z, D, x_train, lbda),
-            obj=lambda z: obj_analy(z, D, x_train, lbda),
-            prox=lambda z, step_size: z, x0=np.zeros_like(x_train),
-            momentum=type_, restarting=None, max_iter=max_iter,
+            grad=lambda v: _grad(v, D, x_train, lbda),
+            obj=lambda v: _obj(v, D, x_train, lbda),
+            prox=_prox, x0=np.zeros((n_train_samples, n_dim)),
+            momentum=momentum, restarting=None, max_iter=max_iter,
             step_size=step_size, early_stopping=False, debug=True, verbose=1,
             )
     _, train_loss = fista(**params)
+
     print('')
 
     params = dict(
-            grad=lambda z: subgrad_analy(z, D, x_test, lbda),
-            obj=lambda z: obj_analy(z, D, x_test, lbda),
-            prox=lambda z, step_size: z, x0=np.zeros_like(x_test),
-            momentum='ista', restarting=None, max_iter=max_iter,
+            grad=lambda v: _grad(v, D, x_test, lbda),
+            obj=lambda v: _obj(v, D, x_test, lbda),
+            prox=_prox, x0=np.zeros((n_test_samples, n_dim)),
+            momentum=momentum, restarting=None, max_iter=max_iter,
             step_size=step_size, early_stopping=False, debug=True, verbose=1,
             )
     _, test_loss = fista(**params)

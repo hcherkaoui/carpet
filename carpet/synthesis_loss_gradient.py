@@ -8,7 +8,6 @@ import numpy as np
 def subgrad(z, D, x, lbda):
     """ Sub-gradient for the temporal prox for one voxels. """
     z = np.atleast_2d(z)
-    n_samples = z.shape[0]
     return grad(z, D, x) + lbda * np.sign(z)
 
 

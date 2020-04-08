@@ -311,13 +311,14 @@ class StepSubGradLTV(ListaBase):
     def _init_network_parameters(self, initial_parameters=[]):
         """ Initialize the parameters of the network. """
         parameters_config = dict(step_size=[])
+        init_step_size = 1e-5
 
         self.layers_parameters = []
         for layer in range(self.n_layers):
             if len(initial_parameters) > layer:
                 layer_params = initial_parameters[layer]
             else:
-                layer_params = dict(step_size=np.array(1.0e-8))  # XXX
+                layer_params = dict(step_size=np.array(init_step_size))
 
             layer_params = self._tensorized_and_hooked_parameters(
                                         layer, layer_params, parameters_config)
@@ -331,7 +332,7 @@ class StepSubGradLTV(ListaBase):
 
         for layer_params in self.layers_parameters[:output_layer]:
             # retrieve parameters
-            step_size = layer_params.get('step_size', 1.)
+            step_size = layer_params.get('step_size', 1.0)
 
             # apply one 'iteration'
             if z_hat is None:
@@ -354,4 +355,141 @@ class StepSubGradLTV(ListaBase):
         return (loss + lbda * reg) / n_samples
 
 
-ALL_LTV = dict(step=StepSubGradLTV)
+class StepChambolleLTV(ListaBase):
+    __doc__ = DOC_LISTA.format(type='LTV Chambolle-Step',
+                               problem_name='TV',
+                               descr=('only learn a step size for the '
+                                      'Chambolle dual algorithm'),
+                               )
+
+    def __init__(self, D, n_layers, learn_th=True, solver="gradient_descent",
+                 max_iter=100, per_layer="one_shot", initial_parameters=[],
+                 name="LTV Chambolle-Step", ctx=None, verbose=1,
+                 device=None):
+        if not learn_th:
+            print("With StepChambolleLTV, 'learn_th' should be enable,"
+                  "'learn_th' switch to True")
+            learn_th = True
+        super().__init__(D=D, n_layers=n_layers, learn_th=learn_th,
+                         solver=solver, max_iter=max_iter,
+                         per_layer=per_layer,
+                         initial_parameters=initial_parameters, name=name,
+                         ctx=ctx, verbose=verbose, device=device)
+
+    def _init_network_parameters(self, initial_parameters=[]):
+        """ Initialize the parameters of the network. """
+        parameters_config = dict(step_size=[])
+
+        self.layers_parameters = []
+        for layer in range(self.n_layers):
+            if len(initial_parameters) > layer:
+                layer_params = initial_parameters[layer]
+            else:
+                layer_params = dict(step_size=np.array(1 / self.L))
+
+            layer_params = self._tensorized_and_hooked_parameters(
+                                        layer, layer_params, parameters_config)
+            self.layers_parameters += [layer_params]
+
+    def forward(self, x, lbda, z0=None, output_layer=None):
+        """ Forward pass of the network. """
+        x, v_hat, output_layer = self._check_forward_inputs(x, z0,
+                                                            output_layer,
+                                                            enable_none=True)
+
+        for layer_params in self.layers_parameters[:output_layer]:
+            # retrieve parameters
+            step_size = layer_params.get('step_size', 1.0)
+            W = self.D_ * step_size
+
+            # apply one 'dual iteration'
+            if v_hat is None:
+                v_hat = x.matmul(W) / lbda
+            else:
+                # apply one 'iteration'
+                residual = v_hat.matmul(self.D_.t()) - x / lbda
+                v_hat = v_hat - residual.matmul(W)
+                v_hat = torch.clamp(v_hat, -1.0, 1.0)
+
+        return v_hat
+
+    def _loss_fn(self, x, lbda, v_hat):
+        """ Target loss function. """
+        n_samples = x.shape[0]
+        x = check_tensor(x, device=self.device)
+        v_hat = check_tensor(v_hat, device=self.device)
+        v_hat = torch.clamp(v_hat, -1.0, 1.0)  # get a feasible point
+        residual = v_hat.matmul(self.D_.t()) - x / lbda  # dual formulation
+        return 0.5 * (residual * residual).sum() / n_samples
+
+
+class CoupledChambolleLTV(ListaBase):
+    __doc__ = DOC_LISTA.format(type='LTV Chambolle-Coupled',
+                               problem_name='TV',
+                               descr=('one weight parametrization from Chen '
+                                      'et al (2018)'),
+                               )
+
+    def __init__(self, D, n_layers, learn_th=False, solver="gradient_descent",
+                 max_iter=100, per_layer="recursive", initial_parameters=[],
+                 name="LTV Chambolle-Coupled", ctx=None, verbose=1,
+                 device=None):
+        if learn_th:
+            raise NotImplementedError('Learning threshold not implemented '
+                                      'for now')
+        super().__init__(D=D, n_layers=n_layers, learn_th=learn_th,
+                         solver=solver, max_iter=max_iter,
+                         per_layer=per_layer,
+                         initial_parameters=initial_parameters, name=name,
+                         ctx=ctx, verbose=verbose, device=device)
+
+    def _init_network_parameters(self, initial_parameters=[]):
+        """ Initialize the parameters of the network. """
+        parameters_config = dict(threshold=[], W_coupled=[])
+
+        self.layers_parameters = []
+        for layer in range(self.n_layers):
+            if len(initial_parameters) > layer:
+                layer_params = initial_parameters[layer]
+            else:
+                layer_params = {}
+                layer_params['W_coupled'] = self.D / self.L
+
+            layer_params = self._tensorized_and_hooked_parameters(
+                                        layer, layer_params, parameters_config)
+            self.layers_parameters += [layer_params]
+
+    def forward(self, x, lbda, z0=None, output_layer=None):
+        """ Forward pass of the network. """
+        x, v_hat, output_layer = self._check_forward_inputs(x, z0,
+                                                            output_layer,
+                                                            enable_none=True)
+
+        for layer_params in self.layers_parameters[:output_layer]:
+            # retrieve parameters
+            step_size = layer_params.get('step_size', 1.0)
+            W = layer_params['W_coupled'] * step_size
+
+            # apply one 'dual iteration'
+            if v_hat is None:
+                v_hat = x.matmul(W) / lbda
+            else:
+                # apply one 'iteration'
+                residual = v_hat.matmul(self.D_.t()) - x / lbda
+                v_hat = v_hat - residual.matmul(W)
+                v_hat = torch.clamp(v_hat, -1.0, 1.0)
+
+        return v_hat
+
+    def _loss_fn(self, x, lbda, v_hat):
+        """ Target loss function. """
+        n_samples = x.shape[0]
+        x = check_tensor(x, device=self.device)
+        v_hat = check_tensor(v_hat, device=self.device)
+        v_hat = torch.clamp(v_hat, -1.0, 1.0)  # get a feasible point
+        residual = v_hat.matmul(self.D_.t()) - x / lbda  # dual formulation
+        return 0.5 * (residual * residual).sum() / n_samples
+
+
+ALL_LTV = dict(step=StepSubGradLTV, stepchambolle=StepChambolleLTV,
+               coupledchambolle=CoupledChambolleLTV)
