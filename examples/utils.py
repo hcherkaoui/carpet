@@ -4,126 +4,145 @@
 
 import time
 import numpy as np
-from carpet.lista import ALL_LISTA, ALL_LTV
-from carpet.synthesis_loss_gradient import grad as grad_synth
-from carpet.synthesis_loss_gradient import obj as obj_synth
-from carpet.analysis_loss_gradient import subgrad as subgrad_analy
-from carpet.analysis_loss_gradient import obj as obj_analy
+from carpet.lista_synthesis import ALL_LISTA
+from carpet.lista_analysis import ALL_LTV
+from carpet.loss_gradient import synthesis_grad, synthesis_obj, analysis_obj
 from carpet.optimization import fista
-from carpet.proximity import soft_thresholding
+from carpet.proximity import pseudo_soft_th_numpy
 
 
-def lista_like_synth_tv(x_train, x_test, D, lbda, all_n_layers, type_='lista'):
-    """ LISTA-like solver for synthesis TV problem. """
-    z0_train = np.zeros_like(x_train.dot(D.T))
-    z0_test = np.zeros_like(x_test.dot(D.T))
-
-    previous_parameters = None
-    train_loss = [obj_synth(z0_train, D, x_train, lbda)]
-    test_loss = [obj_synth(z0_test, D, x_test, lbda)]
-
-    for n_layers in all_n_layers:
-
-        # declare network
-        parametrization = 'lista' if type_ == 'ista' else type_
-        if previous_parameters is not None:
-            lista = ALL_LISTA[parametrization](D=D, n_layers=n_layers,
-                                max_iter=50, device='cpu', name=type_,
-                                initial_parameters=previous_parameters,
-                                verbose=1)
-        else:
-            lista = ALL_LISTA[parametrization](D=D, n_layers=n_layers,
-                              max_iter=50, device='cpu', name=type_,
-                              verbose=1)
-
-        t0_ = time.time()
-        if type_ != 'ista':  # train network
-            lista.fit(x_train, lbda=lbda)
-
-        print(f"[{type_}] model fitted in {time.time() - t0_:.1f}s")
-
-        # save parameters
-        previous_parameters = lista.export_parameters()
-
-        # get train and test error
-        z_train = lista.transform(x_train, lbda, output_layer=n_layers)
-        train_loss.append(obj_synth(z_train, D, x_train, lbda))
-
-        z_test = lista.transform(x_test, lbda, output_layer=n_layers)
-        test_loss.append(obj_synth(z_test, D, x_test, lbda))
-
-    return np.array(train_loss), np.array(test_loss)
+CYELLOW2 = '\33[93m'
+CEND = '\33[0m'
 
 
-def ista_like_synth_tv(x_train, x_test, D, lbda, all_n_layers, type_='ista'):
-    """ ISTA-like solver for synthesis TV problem. """
-    max_iter = all_n_layers[-1]
-    step_size = 1.0 / np.linalg.norm(D.T.dot(D), ord=2)
+def learned_lasso_like_tv(x_train, x_test, L, lbda, all_n_layers, type_):
+    """ NN-algo solver for synthesis TV problem. """
+    params = None
 
-    params = dict(
-            grad=lambda z: grad_synth(z, D, x_train),
-            obj=lambda z: obj_synth(z, D, x_train, lbda),
-            prox=lambda z, step_size: soft_thresholding(z, lbda, step_size),
-            x0=np.zeros_like(x_train),  momentum=type_, restarting=None,
-            max_iter=max_iter, step_size=step_size, early_stopping=False,
-            debug=True, verbose=1,
-            )
-    _, train_loss = fista(**params)
-    print('')
-
-    params = dict(
-            grad=lambda z: grad_synth(z, D, x_test),
-            obj=lambda z: obj_synth(z, D, x_test, lbda),
-            prox=lambda z, step_size: soft_thresholding(z, lbda, step_size),
-            x0=np.zeros_like(x_test),  momentum=type_, restarting=None,
-            max_iter=max_iter, step_size=step_size, early_stopping=False,
-            debug=True, verbose=1,
-            )
-    _, test_loss = fista(**params)
-
-    return train_loss[[0] + all_n_layers], test_loss[[0] + all_n_layers]
-
-
-def lista_like_analy_tv(x_train, x_test, D, lbda, all_n_layers, type_='lista'):
-    """ LISTA-like solver for analysis TV problem. """
-    previous_parameters = None
-
-    train_loss_init = obj_analy(x_train, D, x_train, lbda)
-    test_loss_init = obj_analy(x_test, D, x_test, lbda)
+    train_loss_init = synthesis_obj(x_train, L, x_train, lbda)
+    test_loss_init = synthesis_obj(x_test, L, x_test, lbda)
     train_loss, test_loss = [train_loss_init], [test_loss_init]
 
     for n_layers in all_n_layers:
 
         # declare network
-        parametrization = 'stepchambolle' if type_ == 'chambolle' else type_
-        if previous_parameters is not None:
-            lista = ALL_LTV[parametrization](D=D, n_layers=n_layers,
-                                max_iter=50, device='cpu', name=type_,
-                                per_layer='one_shot',
-                                initial_parameters=previous_parameters,
-                                verbose=10)
+        parametrization = 'lista' if type_ == 'ista' else type_
+        if params is not None:
+            algo = ALL_LISTA[parametrization](D=L, n_layers=n_layers,
+                                              max_iter=100, device='cpu',
+                                              initial_parameters=params,
+                                              verbose=0)
         else:
-            lista = ALL_LTV[parametrization](D=D, n_layers=n_layers,
-                                max_iter=50, device='cpu', name=type_,
-                                per_layer='one_shot', verbose=10)
+            algo = ALL_LISTA[parametrization](D=L, n_layers=n_layers,
+                                              max_iter=100, device='cpu',
+                                              verbose=0)
+
+        t0_ = time.time()
+        if type_ != 'ista':  # train network
+            algo.fit(x_train, lbda=lbda)
+        delta_ = time.time() - t0_
+
+        # save parameters
+        params = algo.export_parameters()
+
+        # get train and test error
+        z_train = algo.transform(x_train, lbda, output_layer=n_layers)
+        train_loss_ = synthesis_obj(z_train, L, x_train, lbda)
+        train_loss.append(train_loss_)
+        z_test = algo.transform(x_test, lbda, output_layer=n_layers)
+        test_loss_ = synthesis_obj(z_test, L, x_test, lbda)
+        test_loss.append(test_loss_)
+
+        starter_msg = '' if n_layers != all_n_layers[-1] else CYELLOW2
+        ending_msg = '' if n_layers != all_n_layers[-1] else CEND
+        msg = starter_msg
+        msg += f"[{algo.name}-layers#{n_layers}] model fitted in "
+        msg += f"{delta_:.1f}s train-loss={train_loss_:.3e} "
+        msg += f"test-loss={test_loss_:.3e}"
+        msg += ending_msg
+        print(msg)
+
+    return np.array(train_loss), np.array(test_loss)
+
+
+def lasso_like_tv(x_train, x_test, D, lbda, all_n_layers, type_):
+    """ Iterative-algo solver for synthesis TV problem. """
+    max_iter = all_n_layers[-1]
+    step_size = 1.0 / np.linalg.norm(D.T.dot(D), ord=2)
+
+    momentum = None if type_ == 'ista' else type_
+
+    print("[ISTA iterative] training loss")
+    params = dict(
+                grad=lambda z: synthesis_grad(z, D, x_train),
+                obj=lambda z: synthesis_obj(z, D, x_train, lbda),
+                prox=lambda z, s: pseudo_soft_th_numpy(z, lbda, s),
+                x0=x_train,  momentum=momentum, restarting=None,
+                max_iter=max_iter, step_size=step_size, early_stopping=False,
+                debug=True, verbose=1,
+                )
+    _, train_loss = fista(**params)
+
+    print("[ISTA iterative] testing loss")
+    params = dict(
+                grad=lambda z: synthesis_grad(z, D, x_test),
+                obj=lambda z: synthesis_obj(z, D, x_test, lbda),
+                prox=lambda z, s: pseudo_soft_th_numpy(z, lbda, s),
+                x0=x_test,  momentum=momentum, restarting=None,
+                max_iter=max_iter, step_size=step_size, early_stopping=False,
+                debug=True, verbose=1,
+                )
+    _, test_loss = fista(**params)
+
+    return train_loss[[0] + all_n_layers], test_loss[[0] + all_n_layers]
+
+
+def learned_chambolle_tv(x_train, x_test, D, lbda, all_n_layers, type_):
+    """ NN-algo solver for analysis TV problem. """
+    params = None
+
+    train_loss_init = analysis_obj(x_train, D, x_train, lbda)
+    test_loss_init = analysis_obj(x_test, D, x_test, lbda)
+    train_loss, test_loss = [train_loss_init], [test_loss_init]
+
+    for n_layers in all_n_layers:
+
+        # declare network
+        parametrization = 'coupledchambolle' if type_ == 'chambolle' else type_
+        if params is not None:
+            algo = ALL_LTV[parametrization](D=D, n_layers=n_layers,
+                                            max_iter=100, device='cpu',
+                                            initial_parameters=params,
+                                            verbose=0)
+        else:
+            algo = ALL_LTV[parametrization](D=D, n_layers=n_layers,
+                                            max_iter=100, device='cpu',
+                                            verbose=0)
 
         t0_ = time.time()
         if type_ != 'chambolle':  # train network
-            lista.fit(x_train, lbda=lbda)
-
-        print(f"[{type_}] model fitted in {time.time() - t0_:.1f}s")
+            algo.fit(x_train, lbda=lbda)
+        delta_ = time.time() - t0_
 
         # save parameters
-        previous_parameters = lista.export_parameters()
+        params = algo.export_parameters()
 
         # get train and test error
-        z_train = lista.transform(x_train, lbda, output_layer=n_layers)
-        z_test = lista.transform(x_test, lbda, output_layer=n_layers)
-        if 'chambolle' in type_:
-            z_train = x_train - lbda * z_train.dot(D.T)
-            z_test = x_test - lbda * z_test.dot(D.T)
-        train_loss.append(obj_analy(z_train, D, x_train, lbda))
-        test_loss.append(obj_analy(z_test, D, x_test, lbda))
+        z_train = algo.transform(x_train, lbda, output_layer=n_layers)
+        train_loss_ = analysis_obj(z_train, D, x_train, lbda)
+        train_loss.append(train_loss_)
+        z_test = algo.transform(x_test, lbda, output_layer=n_layers)
+        test_loss_ = analysis_obj(z_test, D, x_test, lbda)
+        test_loss.append(test_loss_)
+
+        starter_msg = '' if n_layers != all_n_layers[-1] else CYELLOW2
+        ending_msg = '' if n_layers != all_n_layers[-1] else CEND
+        msg = starter_msg
+        msg += f"[{algo.name}-layers#{n_layers}] model fitted in "
+        msg += f"{delta_:.1f}s train-loss={train_loss_:.3e} "
+        msg += f"test-loss={test_loss_:.3e}"
+        msg += ending_msg
+        print(msg)
 
     return np.array(train_loss), np.array(test_loss)
 
@@ -132,7 +151,7 @@ def chambolle_tv(x_train, x_test, D, lbda, all_n_layers, type_):
     """ Chambolle solver for analysis TV problem. """
     max_iter = all_n_layers[-1]
     step_size = 1.0 / np.linalg.norm(D.dot(D.T), ord=2)
-    momentum = 'ista' if type_ == 'chambolle' else 'fista'
+    momentum = None if type_ == 'chambolle' else 'fista'
 
     n_train_samples = x_train.shape[0]
     n_test_samples = x_test.shape[0]
@@ -144,13 +163,12 @@ def chambolle_tv(x_train, x_test, D, lbda, all_n_layers, type_):
     def _obj(v, D, x, lbda):
         v = np.atleast_2d(v)
         z = x - lbda * v.dot(D.T)  # switch to primal formulation
-        n_samples = z.shape[0]
-        cost = 0.5 * np.sum(np.square(z - x)) + lbda * np.sum(np.abs(z.dot(D)))
-        return cost / n_samples
+        return analysis_obj(z, D, x, lbda)
 
     def _prox(z, step_size):
         return np.clip(z, -1.0, 1.0)
 
+    print("[ISTA iterative] training loss")
     params = dict(
             grad=lambda v: _grad(v, D, x_train, lbda),
             obj=lambda v: _obj(v, D, x_train, lbda),
@@ -160,8 +178,7 @@ def chambolle_tv(x_train, x_test, D, lbda, all_n_layers, type_):
             )
     _, train_loss = fista(**params)
 
-    print('')
-
+    print("[ISTA iterative] testing loss")
     params = dict(
             grad=lambda v: _grad(v, D, x_test, lbda),
             obj=lambda v: _obj(v, D, x_test, lbda),

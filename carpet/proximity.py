@@ -7,26 +7,27 @@ import torch
 from torch.nn.functional import relu as relu_tensor
 
 
-def relu(z):
-    """ Relu function """
-    return np.maximum(z, 0.0)
+def _soft_th_numpy(z, lbda, step_size):
+    return np.sign(z) * np.maximum(np.abs(z) - lbda * step_size, 0.0)
 
 
-def soft_thresholding_numpy(z, lbda, step_size):
-    """ Soft-thresholding for numpy array. """
-    return np.sign(z) * relu(np.abs(z) - lbda * step_size)
-
-
-def soft_thresholding_tensor(z, lbda, step_size):
-    """ Soft-thresholding for Torch tensor. """
+def _soft_th_tensor(z, lbda, step_size):
     return z.sign() * relu_tensor(z.abs() - lbda * step_size)
 
 
-def soft_thresholding(z, lbda, step_size):
-    """ Soft-thresholding. """
-    if isinstance(z, np.ndarray):
-        return soft_thresholding_numpy(z, lbda, step_size)
-    elif isinstance(z, torch.Tensor):
-        return soft_thresholding_tensor(z, lbda, step_size)
-    else:
-        raise ValueError(f"wrong type for z, got {type(z)}")  # noqa: E999
+def pseudo_soft_th_numpy(z, lbda, step_size):
+    """ Pseudo Soft-thresholding for numpy array. """
+    assert z.ndim == 2
+    z0_ = np.atleast_2d(z[:, 0])
+    z_ = np.atleast_2d(_soft_th_numpy(z[:, 1:], lbda, step_size))
+    if z0_.shape[0] != z_.shape[0]:
+        z0_ = z0_.T
+    return np.concatenate((z0_, z_), axis=1)
+
+
+def pseudo_soft_th_tensor(z, lbda, step_size):
+    """ Soft-thresholding for Torch tensor. """
+    assert z.ndim == 2
+    z0_ = z[:, 0][:, None]
+    z_ = _soft_th_tensor(z[:, 1:], lbda, step_size)
+    return torch.cat([z0_, z_], dim=1)

@@ -3,7 +3,8 @@ import pytest
 import numpy as np
 import torch
 from carpet.checks import check_random_state
-from carpet.proximity import soft_thresholding_numpy, soft_thresholding_tensor
+from carpet.proximity import (pseudo_soft_th_tensor,
+                              pseudo_soft_th_numpy)
 
 
 @pytest.mark.parametrize('seed', [None])
@@ -13,8 +14,8 @@ def test_soft_thresholding(seed, shape, lbda):
     """ Test the gradient of z. """
     z = check_random_state(seed).randn(*shape)
 
-    prox_z_ref = soft_thresholding_tensor(torch.Tensor(z),
-                                          lbda, step_size=1.0).numpy()
-    prox_z = soft_thresholding_numpy(z, lbda, step_size=1.0)
+    prox_z_ref = pseudo_soft_th_tensor(torch.Tensor(z), lbda, step_size=1.0)
+    prox_z_ref = prox_z_ref.numpy()
+    prox_z = pseudo_soft_th_numpy(z, lbda, step_size=1.0)
 
     np.testing.assert_allclose(prox_z_ref, prox_z, rtol=1e-2)

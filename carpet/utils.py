@@ -13,7 +13,7 @@ def get_alista_weights(D, max_iter=10000, step_size=1e-2, tol=1e-12):
     D : ndarray, shape (n_atoms, n_dim)
         Dictionary for the considered sparse coding problem.
     """
-    n_atoms, n_dim = D.shape
+    n_atoms, _ = D.shape
     W = np.copy(D)
 
     def _obj_func(W, D):
@@ -36,7 +36,8 @@ def get_alista_weights(D, max_iter=10000, step_size=1e-2, tol=1e-12):
 
         # criterion stop
         pobj.append(_obj_func(W, D))
-        assert pobj[-1] <= pobj[-2] + 1e-8, (pobj[-2] - pobj[-1])
+        msg = f"loss function increase {(pobj[-2] - pobj[-1])} at iter {i}"
+        assert pobj[-1] <= pobj[-2] + 1e-8, msg
         if 1 - pobj[-1] / pobj[-2] < tol:
             break
 

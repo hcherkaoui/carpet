@@ -116,27 +116,6 @@ class ListaBase(torch.nn.Module):
                                       f", got {self.solver}")
         return self
 
-    def transform(self, x, lbda, z0=None, output_layer=None):
-        """ Compute the output of the network, given x and regularization lbda
-
-        Parameters
-        ----------
-        x : ndarray, shape (n_samples, n_dim)
-            input of the network.
-        lbda: float
-            Regularization level for the optimization problem.
-        z0 : ndarray, shape (n_samples, n_atoms) (default: None)
-            Initial point for the optimization algorithm. If None, the
-            algorithm starts from 0
-        output_layer : int (default: None)
-            Layer to output from. It should be smaller than the number of
-            layers of the network. If set to None, output the last layer of the
-            network.
-        """
-        with torch.no_grad():
-            return self(x, lbda, z0=z0,
-                        output_layer=output_layer).cpu().numpy()
-
     def score(self, x, lbda, z0=None, output_layer=None):
         """ Compute the loss for the network's output
 
@@ -307,6 +286,7 @@ class ListaBase(torch.nn.Module):
         # init back-propagation
         z_hat = self(x, lbda, output_layer=n_layer)
         loss = self._loss_fn(x, lbda, z_hat)
+        # Compute gradient
         loss.backward()
 
     def _update_parameters(self, parameters, lr):

@@ -73,7 +73,7 @@ def fista(grad, obj, prox, x0, momentum='fista', restarting=None, max_iter=100,
         print(f"[{name}] Can't have verbose if cost-func is not computed, "
               f"enable it by setting debug=True")
 
-    if momentum not in ['fista', 'ista', 'greedy']:
+    if momentum not in [None, 'fista', 'greedy']:
         raise ValueError(f"[{name}] momentum should be ['fista', 'ista', "
                          f"'greedy'], got {momentum}")
 
@@ -117,15 +117,15 @@ def fista(grad, obj, prox, x0, momentum='fista', restarting=None, max_iter=100,
         x = prox(y - step_size * grad_, step_size)
 
         # fista acceleration
-        if momentum == 'fista':
+        if momentum is None:
+            y = x
+
+        elif momentum == 'fista':
             t = 0.5 * (1.0 + np.sqrt(1.0 + 4.0 * t_old**2))
             y = x + (t_old - 1.0) / t * (x - x_old)
 
         elif momentum == 'greedy':
             y = x + (x - x_old)
-
-        elif momentum == 'ista':
-            y = x
 
         diff_.append(np.linalg.norm(x - x_old))
 
