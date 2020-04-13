@@ -16,6 +16,7 @@ dist/
 .DS_Store
 .cache
 __cache__
+__cache_dir__
 build
 .pytest_cache
 __pycache__

@@ -11,10 +11,6 @@ from carpet.optimization import fista
 from carpet.proximity import pseudo_soft_th_numpy
 
 
-CYELLOW2 = '\33[93m'
-CEND = '\33[0m'
-
-
 def learned_lasso_like_tv(x_train, x_test, L, lbda, all_n_layers, type_):
     """ NN-algo solver for synthesis TV problem. """
     params = None
@@ -53,20 +49,16 @@ def learned_lasso_like_tv(x_train, x_test, L, lbda, all_n_layers, type_):
         test_loss_ = synthesis_obj(z_test, L, x_test, lbda)
         test_loss.append(test_loss_)
 
-        starter_msg = '' if n_layers != all_n_layers[-1] else CYELLOW2
-        ending_msg = '' if n_layers != all_n_layers[-1] else CEND
-        msg = starter_msg
-        msg += f"[{algo.name}-layers#{n_layers}] model fitted in "
-        msg += f"{delta_:.1f}s train-loss={train_loss_:.3e} "
-        msg += f"test-loss={test_loss_:.3e}"
-        msg += ending_msg
-        print(msg)
+        print(f"[{algo.name}-layers#{n_layers}] model fitted in "
+              f"{delta_:.1f}s train-loss={train_loss_:.6e} "
+              f"test-loss={test_loss_:.6e}")
 
     return np.array(train_loss), np.array(test_loss)
 
 
 def lasso_like_tv(x_train, x_test, D, lbda, all_n_layers, type_):
     """ Iterative-algo solver for synthesis TV problem. """
+    name = 'ISTA' if type_ == 'chambolle' else 'FISTA'
     max_iter = all_n_layers[-1]
     step_size = 1.0 / np.linalg.norm(D.T.dot(D), ord=2)
 
@@ -93,6 +85,9 @@ def lasso_like_tv(x_train, x_test, D, lbda, all_n_layers, type_):
                 debug=True, verbose=1,
                 )
     _, test_loss = fista(**params)
+
+    print(f"[{name}] iterations finished in train-loss={train_loss[-1]:.6e} "
+          f"test-loss={test_loss[-1]:.6e}")
 
     return train_loss[[0] + all_n_layers], test_loss[[0] + all_n_layers]
 
@@ -135,20 +130,16 @@ def learned_chambolle_tv(x_train, x_test, D, lbda, all_n_layers, type_):
         test_loss_ = analysis_obj(z_test, D, x_test, lbda)
         test_loss.append(test_loss_)
 
-        starter_msg = '' if n_layers != all_n_layers[-1] else CYELLOW2
-        ending_msg = '' if n_layers != all_n_layers[-1] else CEND
-        msg = starter_msg
-        msg += f"[{algo.name}-layers#{n_layers}] model fitted in "
-        msg += f"{delta_:.1f}s train-loss={train_loss_:.3e} "
-        msg += f"test-loss={test_loss_:.3e}"
-        msg += ending_msg
-        print(msg)
+        print(f"[{algo.name}-layers#{n_layers}] model fitted in "
+              f"{delta_:.1f}s train-loss={train_loss_:.6e} "
+              f"test-loss={test_loss_:.6e}")
 
     return np.array(train_loss), np.array(test_loss)
 
 
 def chambolle_tv(x_train, x_test, D, lbda, all_n_layers, type_):
     """ Chambolle solver for analysis TV problem. """
+    name = 'ISTA' if type_ == 'chambolle' else 'FISTA'
     max_iter = all_n_layers[-1]
     step_size = 1.0 / np.linalg.norm(D.dot(D.T), ord=2)
     momentum = None if type_ == 'chambolle' else 'fista'
@@ -187,5 +178,8 @@ def chambolle_tv(x_train, x_test, D, lbda, all_n_layers, type_):
             step_size=step_size, early_stopping=False, debug=True, verbose=1,
             )
     _, test_loss = fista(**params)
+
+    print(f"[{name}] iterations finished in train-loss={train_loss[-1]:.6e} "
+          f"test-loss={test_loss[-1]:.6e}")
 
     return train_loss[[0] + all_n_layers], test_loss[[0] + all_n_layers]

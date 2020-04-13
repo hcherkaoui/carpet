@@ -284,10 +284,10 @@ class StepIstaLASSO(ListaBase):
     def __init__(self, D, n_layers, learn_th=True, solver="gradient_descent",
                  max_iter=100, per_layer='one_shot', initial_parameters=[],
                  name="Step-LISTA", ctx=None, verbose=1, device=None):
-        if learn_th:
-            print("In 'StepIstaLASSO' 'learn_th' can't be enable, switch it "
-                  "to False")
-            learn_th = True
+        # if learn_th:
+        #     print("In StepIstaLASSO learn_th can't be enable, switch it "
+        #           "to False")
+        #     learn_th = False
         super().__init__(D=D, n_layers=n_layers, learn_th=learn_th,
                          solver=solver, max_iter=max_iter,
                          per_layer=per_layer,
