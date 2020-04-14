@@ -7,15 +7,15 @@ import numpy as np
 from scipy.optimize.linesearch import line_search_armijo
 
 
-def condatvu(grad, obj, prox, psi, adj_psi, y0, x0, lbda, sigma, tau, rho=1.0,
+def condatvu(grad, obj, prox, psi, adj_psi, v0, z0, lbda, sigma, tau, rho=1.0,
              max_iter=1000, early_stopping=True, eps=np.finfo(np.float64).eps,
              times=False, debug=False, name='Optimisation', verbose=0):
     """ Condat-Vu algorithm. """
     # init the iterates
-    y_old, x_old = np.copy(y0), np.copy(x0)
+    v_old, z_old = np.copy(v0), np.copy(z0)
 
     # saving variables
-    dg, pobj_, times_ = [0.0], [obj(x_old)], [0.0]
+    dg, pobj_, times_ = [v0 - psi(z0)], [obj(z_old)], [0.0]
 
     for ii in range(max_iter):
 
@@ -23,27 +23,27 @@ def condatvu(grad, obj, prox, psi, adj_psi, y0, x0, lbda, sigma, tau, rho=1.0,
             t0 = time.process_time()
 
         # primal descent
-        x_prox = x_old - tau * grad(x_old) - tau * adj_psi(y_old)
+        z_prox = z_old - tau * grad(z_old) - tau * adj_psi(v_old)
 
         # dual ascent
-        y_tmp = y_old + sigma * psi(2 * x_prox - x_old)
-        y_prox = y_tmp - sigma * prox(y_tmp / sigma)
+        v_tmp = v_old + sigma * psi(2 * z_prox - z_old)
+        v_prox = v_tmp - sigma * prox(v_tmp / sigma)
 
         # relaxed updates
-        x_new = rho * x_prox + (1 - rho) * x_old
-        y_new = rho * y_prox + (1 - rho) * y_old
+        z_new = rho * z_prox + (1 - rho) * z_old
+        v_new = rho * v_prox + (1 - rho) * v_old
 
         # var. update
-        x_old = x_new
-        y_old = y_new
+        z_old = z_new
+        v_old = v_new
 
         # savings
         if times:
             times_.append(time.process_time() - t0)
 
         if debug:
-            pobj_.append(obj(x_new))
-            dg.append(np.linalg.norm(psi(x_new) - y_new))
+            pobj_.append(obj(z_new))
+            dg.append(np.linalg.norm(psi(z_new) - v_new))
 
         # printing
         if debug and verbose > 0:
@@ -55,13 +55,13 @@ def condatvu(grad, obj, prox, psi, adj_psi, y0, x0, lbda, sigma, tau, rho=1.0,
             break
 
     if not times and not debug:
-        return x_new, y_new
+        return z_new, v_new
     if times and not debug:
-        return x_new, y_new, times_
+        return z_new, v_new, np.array(times_)
     if not times and debug:
-        return x_new, y_new, pobj_
+        return z_new, v_new, np.array(pobj_)
     if times and debug:
-        return x_new, y_new, pobj_, times_
+        return z_new, v_new, np.array(pobj_), np.array(times_)
 
 
 def fista(grad, obj, prox, x0, momentum='fista', restarting=None, max_iter=100,

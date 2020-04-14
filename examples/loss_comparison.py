@@ -13,7 +13,7 @@ from carpet.datasets import synthetic_1d_dataset
 from carpet.loss_gradient import analysis_obj
 from carpet.utils import logspace_layers
 from utils import (lasso_like_tv, learned_lasso_like_tv, chambolle_tv,
-                   learned_chambolle_tv)
+                   learned_chambolle_tv, condatvu_tv)
 
 
 if __name__ == '__main__':
@@ -27,17 +27,21 @@ if __name__ == '__main__':
     if not os.path.exists(ploting_dir):
         os.makedirs(ploting_dir)
 
+    ###########################################################################
+    # Define variables and data
+
     # Define variables
-    n_samples = 3000
-    n_samples_testing = 500
-    m = 50
-    s = 0.1
+    n_samples = 1000
+    n_samples_testing = 100
+    m = 10
+    s = 0.2
     snr = 0.0
     all_n_layers = logspace_layers(n_layers=10, max_depth=100)
     ticks_layers = np.array([0] + all_n_layers)
-    lbda = 0.6
+    lbda = 0.75
 
     seed = np.random.randint(0, 1000)
+    # seed = 113
     print(f'Seed used = {seed}')  # noqa: E999
 
     # Generate data
@@ -48,54 +52,63 @@ if __name__ == '__main__':
     x_train = x[n_samples_testing:, :]
     x_test = x[:n_samples_testing, :]
 
+    ###########################################################################
+    # Main experiment
+
     names = [
              'LISTA original',
              'LISTA coupled',
              'LISTA step',
-             'ISTA iterative',
+            #  'ISTA iterative',
              'FISTA-iterative',
+             'learned-Condat-Vu',
+             'Condat-Vu-iterative',
              'learned-TV Chamb-Original',
              'learned-TV Chamb-Coupled',
              'learned-TV Chamb-Step',
-             'Chamb iterative',
-             'Fast Chamb iterative',
+            #  'Chamb iterative',
+            #  'Fast Chamb iterative',
              ]
     funcs_bench = [
                    learned_lasso_like_tv,
                    learned_lasso_like_tv,
                    learned_lasso_like_tv,
                    lasso_like_tv,
-                   lasso_like_tv,
+                #    lasso_like_tv,
+                   learned_chambolle_tv,
+                   condatvu_tv,
                    learned_chambolle_tv,
                    learned_chambolle_tv,
                    learned_chambolle_tv,
-                   chambolle_tv,
-                   chambolle_tv,
+                #    chambolle_tv,
+                #    chambolle_tv,
                    ]
     l_type_ = [
                'lista',
                'coupled',
                'step',
-               'ista',
+            #    'ista',
                'fista',
+               'condatvu',
+               None,
                'lchambolle',
                'coupledchambolle',
                'stepchambolle',
-               'chambolle',
-               'fast-chambolle',
+            #    'chambolle',
+            #    'fast-chambolle',
                ]
 
     def _run_experiment(names, funcs_bench, l_type_, x_train, x_test, L, lbda,
                         all_n_layers):
         """ Experiment launcher. """
         l_train_loss, l_test_loss = [], []
+        print("=" * 80)
         for name, func_bench, type_ in zip(names, funcs_bench, l_type_):
             print(f"[main script] running {name}")
             print("-" * 80)
-            # get the loss function evolution for a given 'algorithm'
-            train_loss, test_loss = func_bench(x_train, x_test, L, lbda,
-                                               type_=type_,
-                                               all_n_layers=all_n_layers)
+            A = D if ('Chamb' in name) or ('Condat' in name) else L
+            train_loss, test_loss = func_bench(x_train, x_test, A,
+                            lbda=lbda, type_=type_, all_n_layers=all_n_layers)
             l_train_loss.append(train_loss)
             l_test_loss.append(test_loss)
             print("=" * 80)
@@ -107,7 +120,8 @@ if __name__ == '__main__':
                                                x_train, x_test, L, lbda,
                                                all_n_layers)
 
-    # Plotting processing
+    ###########################################################################
+    # Plotting
     lw = 3
     eps_plots = 1.0e-10
     z_hat_train_star = np.c_[[tv1_1d(x_train_, lbda) for x_train_ in x_train]]
@@ -115,17 +129,16 @@ if __name__ == '__main__':
     min_train_loss = analysis_obj(z_hat_train_star, D, x_train, lbda)
     min_test_loss = analysis_obj(z_hat_test_star, D, x_test, lbda)
 
-    # Plotting loss function
     fig, l_axis = plt.subplots(nrows=2, sharex=True, figsize=(12, 8),
                                num=f"[{__file__}] Loss functions")
     axis_train, axis_test = l_axis
 
     for name, train_loss in zip(names, l_train_loss):
         marker = '^' if 'Chamb' in name else 'o'
-        ls = '--' if 'iterative' in name else '-'
+        ls = 'dotted' if 'iterative' in name else 'solid'
         train_loss -= (min_train_loss - eps_plots)
         axis_train.loglog(ticks_layers + 1, train_loss, marker=marker, lw=lw,
-                          ms=2*lw, ls=ls, label=name)
+                          ms=3*lw, ls=ls, label=name)
     axis_train.legend(bbox_to_anchor=(1.05, 1.0), loc='upper left',
                       borderaxespad=0.0, fontsize=15)
     axis_train.grid()
@@ -136,10 +149,10 @@ if __name__ == '__main__':
 
     for name, test_loss in zip(names, l_test_loss):
         marker = '^' if 'Chamb' in name else 'o'
-        ls = '--' if 'iterative' in name else '-'
+        ls = 'dotted' if 'iterative' in name else 'solid'
         test_loss -= (min_test_loss - eps_plots)
         axis_test.loglog(ticks_layers + 1, test_loss, marker=marker, lw=lw,
-                         ms=2*lw, ls=ls, label=name)
+                         ms=3*lw, ls=ls, label=name)
     axis_test.legend(bbox_to_anchor=(1.05, 1.0), loc='upper left',
                      borderaxespad=0.0, fontsize=15)
     axis_test.grid()

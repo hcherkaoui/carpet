@@ -6,8 +6,9 @@ import time
 import numpy as np
 from carpet.lista_synthesis import ALL_LISTA
 from carpet.lista_analysis import ALL_LTV
-from carpet.loss_gradient import synthesis_grad, synthesis_obj, analysis_obj
-from carpet.optimization import fista
+from carpet.loss_gradient import (analysis_obj, analysis_grad, synthesis_grad,
+                                  synthesis_obj, analysis_obj)
+from carpet.optimization import fista, condatvu
 from carpet.proximity import pseudo_soft_th_numpy
 
 
@@ -25,12 +26,12 @@ def learned_lasso_like_tv(x_train, x_test, L, lbda, all_n_layers, type_):
         parametrization = 'lista' if type_ == 'ista' else type_
         if params is not None:
             algo = ALL_LISTA[parametrization](D=L, n_layers=n_layers,
-                                              max_iter=100, device='cpu',
+                                              max_iter=200, device='cpu',
                                               initial_parameters=params,
                                               verbose=0)
         else:
             algo = ALL_LISTA[parametrization](D=L, n_layers=n_layers,
-                                              max_iter=100, device='cpu',
+                                              max_iter=200, device='cpu',
                                               verbose=0)
 
         t0_ = time.time()
@@ -106,16 +107,16 @@ def learned_chambolle_tv(x_train, x_test, D, lbda, all_n_layers, type_):
         parametrization = 'coupledchambolle' if type_ == 'chambolle' else type_
         if params is not None:
             algo = ALL_LTV[parametrization](D=D, n_layers=n_layers,
-                                            max_iter=100, device='cpu',
+                                            max_iter=200, device='cpu',
                                             initial_parameters=params,
                                             verbose=0)
         else:
             algo = ALL_LTV[parametrization](D=D, n_layers=n_layers,
-                                            max_iter=100, device='cpu',
+                                            max_iter=200, device='cpu',
                                             verbose=0)
 
         t0_ = time.time()
-        if type_ != 'chambolle':  # train network
+        if type_ not in ['chambolle', 'condatvu']:  # train network
             algo.fit(x_train, lbda=lbda)
         delta_ = time.time() - t0_
 
@@ -181,5 +182,54 @@ def chambolle_tv(x_train, x_test, D, lbda, all_n_layers, type_):
 
     print(f"[{name}] iterations finished in train-loss={train_loss[-1]:.6e} "
           f"test-loss={test_loss[-1]:.6e}")
+
+    return train_loss[[0] + all_n_layers], test_loss[[0] + all_n_layers]
+
+
+def condatvu_tv(x_train, x_test, D, lbda, all_n_layers, type_):
+    """ Condat-Vu solver for analysis TV problem. """
+    max_iter = all_n_layers[-1]
+    rho = 1.0
+    sigma = 0.5
+    L_D, L_I = np.linalg.norm(D.dot(D.T), ord=2), 1.0  # lipschtiz constant
+    tau = 1.0 / (L_I / 2.0 + sigma * L_D**2)
+
+    n_train_samples = x_train.shape[0]
+    n_test_samples = x_test.shape[0]
+    dim_z = D.shape[1]
+
+    print("[Condat-Vu iterative] training loss")
+    params = dict(
+             grad=lambda z: analysis_grad(z, x_train),
+             obj=lambda z: analysis_obj(z, D, x_train, lbda),
+             prox=lambda z: pseudo_soft_th_numpy(z, lbda, 1.0 / sigma),
+             psi=lambda z: z.dot(D),
+             adj_psi=lambda z: z.dot(D.T),
+             v0=np.zeros((n_train_samples, dim_z)),
+             z0=x_train,
+             lbda=lbda, sigma=sigma, tau=tau, rho=rho,
+             max_iter=max_iter, early_stopping=False, debug=True, verbose=0,
+             )
+    _, _, train_loss = condatvu(**params)
+
+    print("[Condat-Vu iterative] testing loss")
+    params = dict(
+             grad=lambda z: analysis_grad(z, x_test),
+             obj=lambda z: analysis_obj(z, D, x_test, lbda),
+             prox=lambda z: pseudo_soft_th_numpy(z, lbda, 1.0 / sigma),
+             psi=lambda z: z.dot(D),
+             adj_psi=lambda z: z.dot(D.T),
+             v0=np.zeros((n_test_samples, dim_z)),
+             z0=x_test,
+             lbda=lbda, sigma=sigma, tau=tau, rho=rho,
+             max_iter=max_iter, early_stopping=False, debug=True, verbose=0,
+             )
+    _, _, test_loss = condatvu(**params)
+
+    print(f"[Condat-Vu] iterations finished in "
+          f"train-loss={train_loss[-1]:.6e} test-loss={test_loss[-1]:.6e}")
+
+    # print(train_loss[[0] + all_n_layers])
+    # print(test_loss[[0] + all_n_layers])
 
     return train_loss[[0] + all_n_layers], test_loss[[0] + all_n_layers]
