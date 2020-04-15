@@ -15,7 +15,8 @@ def condatvu(grad, obj, prox, psi, adj_psi, v0, z0, lbda, sigma, tau, rho=1.0,
     v_old, z_old = np.copy(v0), np.copy(z0)
 
     # saving variables
-    dg, pobj_, times_ = [v0 - psi(z0)], [obj(z_old)], [0.0]
+    dg, pobj_, times_ = [np.linalg.norm(psi(z0) - v0)], [obj(z_old)], [0.0]
+    saved_z_,saved_v_ = [z0], [v0]
 
     for ii in range(max_iter):
 
@@ -42,6 +43,8 @@ def condatvu(grad, obj, prox, psi, adj_psi, v0, z0, lbda, sigma, tau, rho=1.0,
             times_.append(time.process_time() - t0)
 
         if debug:
+            saved_z_.append(z_new)
+            saved_v_.append(v_new)
             pobj_.append(obj(z_new))
             dg.append(np.linalg.norm(psi(z_new) - v_new))
 
@@ -59,9 +62,10 @@ def condatvu(grad, obj, prox, psi, adj_psi, v0, z0, lbda, sigma, tau, rho=1.0,
     if times and not debug:
         return z_new, v_new, np.array(times_)
     if not times and debug:
-        return z_new, v_new, np.array(pobj_)
+        return z_new, v_new, saved_z_, saved_v_, np.array(pobj_)
     if times and debug:
-        return z_new, v_new, np.array(pobj_), np.array(times_)
+        return z_new, v_new, saved_z_, saved_v_, np.array(pobj_), \
+               np.array(times_)
 
 
 def fista(grad, obj, prox, x0, momentum='fista', restarting=None, max_iter=100,
@@ -87,7 +91,7 @@ def fista(grad, obj, prox, x0, momentum='fista', restarting=None, max_iter=100,
 
     # prepare the iterate
     x_old, x, y, y_old = np.copy(x0), np.copy(x0), np.copy(x0), np.copy(x0)
-    pobj_, times_, diff_ = [obj(y)], [0.0], [0.0]
+    pobj_, times_, diff_, saved_y_ = [obj(y)], [0.0], [0.0], [y]
     t = t_old = 1
 
     # prepare the adaptative-step variables
@@ -136,6 +140,7 @@ def fista(grad, obj, prox, x0, momentum='fista', restarting=None, max_iter=100,
 
         # savings cost-function values
         if debug:
+            saved_y_.append(y)
             if adaptive_step_size:
                 pobj_.append(old_fval)
             else:
@@ -194,6 +199,6 @@ def fista(grad, obj, prox, x0, momentum='fista', restarting=None, max_iter=100,
     if times and not debug:
         return y, np.array(times_)
     if not times and debug:
-        return y, np.array(pobj_)
+        return y, saved_y_, np.array(pobj_)
     if times and debug:
-        return y, np.array(pobj_), np.array(times_)
+        return y, saved_y_, np.array(pobj_), np.array(times_)

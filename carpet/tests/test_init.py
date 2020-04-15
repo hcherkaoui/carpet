@@ -21,7 +21,6 @@ def test_init_parameters(seed, m, n, lbda, parametrization):
     x, _, _ = synthetic_1d_dataset(D=L, n=10, s=0.4, snr=1.0, seed=rng)
     x /= np.max(np.abs(x.dot(L.T)), axis=1, keepdims=True)
 
-    z0_tensor = check_tensor(np.zeros_like(x), 'cpu')
     x_tensor = check_tensor(x, 'cpu')
 
     lista_1 = ALL_LISTA[parametrization](D=L, n_layers=n_layers, max_iter=10,
@@ -31,7 +30,7 @@ def test_init_parameters(seed, m, n, lbda, parametrization):
 
     loss_lista_1 = []
     for n_layer_ in range(n_layers + 1):
-        z_hat_1 = lista_1.transform(x=x_tensor, lbda=lbda, z0=z0_tensor,
+        z_hat_1 = lista_1.transform(x=x_tensor, lbda=lbda,
                                     output_layer=n_layer_)
         loss_lista_1.append(synthesis_obj(z=z_hat_1, L=L, x=x, lbda=lbda))
     loss_lista_1 = np.array(loss_lista_1)
@@ -44,7 +43,7 @@ def test_init_parameters(seed, m, n, lbda, parametrization):
 
     loss_lista_2 = []
     for n_layer_ in range(n_layers + 1):
-        z_hat_2 = lista_2.transform(x=x_tensor, lbda=lbda, z0=z0_tensor,
+        z_hat_2 = lista_2.transform(x=x_tensor, lbda=lbda,
                                     output_layer=n_layer_)
         loss_lista_2.append(synthesis_obj(z=z_hat_2, L=L, x=x, lbda=lbda))
     loss_lista_2 = np.array(loss_lista_2)

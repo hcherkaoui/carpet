@@ -40,7 +40,7 @@ class ListaBase(torch.nn.Module):
 
     def __init__(self, D, n_layers, learn_th=True, solver="gradient_descent",
                  max_iter=100, per_layer='recursive', initial_parameters=[],
-                 name="LISTA", ctx=None, verbose=1, device=None):
+                 name="LISTA", ctx=None, verbose=0, device=None):
         self.name = name
         self._ctx = ctx
         self.device = device
@@ -116,7 +116,7 @@ class ListaBase(torch.nn.Module):
                                       f", got {self.solver}")
         return self
 
-    def score(self, x, lbda, z0=None, output_layer=None):
+    def score(self, x, lbda, output_layer=None):
         """ Compute the loss for the network's output
 
         Parameters
@@ -125,9 +125,6 @@ class ListaBase(torch.nn.Module):
             input of the network.
         lbda: float
             Regularization level for the optimization problem.
-        z0 : ndarray, shape (n_samples, n_atoms) (default: None)
-            Initial point for the optimization algorithm. If None, the
-            algorithm starts from 0
         output_layer : int (default: None)
             Layer to output from. It should be smaller than the number of
             layers of the network. Ifs set to None, output the network's last
@@ -135,10 +132,10 @@ class ListaBase(torch.nn.Module):
         """
         x = check_tensor(x, device=self.device)
         with torch.no_grad():
-            return self._loss_fn(x, lbda, self(x, lbda, z0=z0,
+            return self._loss_fn(x, lbda, self(x, lbda,
                                  output_layer=output_layer)).cpu().numpy()
 
-    def compute_loss(self, x, lbda, z0=None):
+    def compute_loss(self, x, lbda):
         """ Compute the loss for the network's output at each layer
 
         Parameters
@@ -147,18 +144,15 @@ class ListaBase(torch.nn.Module):
             input of the network.
         lbda: float
             Regularization level for the optimization problem.
-        z0 : ndarray, shape (n_samples, n_atoms) (default: None)
-            Initial point for the optimization algorithm. If None, the
-            algorithm starts from 0
         """
         x = check_tensor(x, device=self.device)
         loss = []
         with torch.no_grad():
             for output_layer in range(self.n_layers):
-                loss.append(self._loss_fn(
-                    x, lbda,
-                    self(x, lbda, z0=z0, output_layer=output_layer + 1)
-                    ).cpu().numpy())
+                loss_ = self._loss_fn(
+                        x, lbda, self(x, lbda, output_layer=output_layer + 1))
+                loss = loss_.cpu().numpy()
+                loss.append(loss_)
         return np.array(loss)
 
     def _init_network_parameters(self, initial_parameters=[]):
@@ -309,19 +303,17 @@ class ListaBase(torch.nn.Module):
 
         return float(max_norm_grad)
 
-    def _check_forward_inputs(self, x, z0, output_layer, enable_none=False):
+    def _check_forward_inputs(self, x, output_layer, enable_none=False):
         """ Format properly the inputs for the 'forward' method. """
         x_none_ok = (x is None) and enable_none
         x = x if x_none_ok else check_tensor(x, device=self.device)
-        z0_none_ok = (z0 is None) and enable_none
-        z0 = z0 if z0_none_ok else check_tensor(z0, device=self.device)
         if output_layer is None:
             output_layer = self.n_layers
         elif output_layer > self.n_layers:
             raise ValueError(f"Requested output from out-of-bound layer "
                              f"output_layer={output_layer} "
                              f"(n_layers={self.n_layers})")
-        return x, z0, output_layer
+        return x, output_layer
 
     def _tensorized_and_hooked_parameters(self, layer, layer_params,
                                           parameters_config):
