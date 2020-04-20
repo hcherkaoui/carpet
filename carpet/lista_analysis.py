@@ -7,6 +7,7 @@ import numpy as np
 from .lista_base import ListaBase, DOC_LISTA
 from .checks import check_tensor
 from .proximity import pseudo_soft_th_tensor
+from .utils import init_vuz, v_to_u
 
 
 class StepSubGradTV(ListaBase):
@@ -15,15 +16,24 @@ class StepSubGradTV(ListaBase):
                                descr='only learn a step size'
                                )
 
-    def __init__(self, D, n_layers, learn_th=True, solver="gradient_descent",
-                 max_iter=100, per_layer="one_shot", initial_parameters=[],
-                 name="learned-TV Sub Gradient", ctx=None, verbose=0,
-                 device=None):
-        super().__init__(D=D, n_layers=n_layers, learn_th=learn_th,
-                         solver=solver, max_iter=max_iter,
-                         per_layer=per_layer,
+    def __init__(self, A, n_layers, learn_th=True, max_iter=100,
+                 net_solver_type="one_shot", initial_parameters=[],
+                 name="learned-TV Sub Gradient", verbose=0, device=None):
+
+        n_atoms = A.shape[0]
+        self.A = np.array(A)
+        self.D = (np.eye(n_atoms, k=-1) - np.eye(n_atoms, k=0))[:, :-1]
+
+        self.A_ = check_tensor(self.A, device=device)
+        self.D_ = check_tensor(self.D, device=device)
+
+        if learn_th:
+            print("In StepSubGradTV learn_th can't be enable, ignore it.")
+
+        super().__init__(n_layers=n_layers, learn_th=False,
+                         max_iter=max_iter, net_solver_type=net_solver_type,
                          initial_parameters=initial_parameters, name=name,
-                         ctx=ctx, verbose=verbose, device=device)
+                         verbose=verbose, device=device)
 
     def _init_network_parameters(self, initial_parameters=[]):
         """ Initialize the parameters of the network. """
@@ -37,8 +47,6 @@ class StepSubGradTV(ListaBase):
                 layer_params = initial_parameters[layer]
             else:
                 layer_params = dict()
-                if self.learn_th:
-                    layer_params['threshold'] = np.array(1.0)
                 layer_params['step_size'] = np.array(init_step_size)
 
             layer_params = self._tensorized_and_hooked_parameters(
@@ -47,79 +55,78 @@ class StepSubGradTV(ListaBase):
 
     def forward(self, x, lbda, output_layer=None):
         """ Forward pass of the network. """
+        # check inputs
         x, output_layer = self._check_forward_inputs(
                                             x, output_layer, enable_none=True)
 
-        Lz_hat = x
+        # initialized variables
+        _, u, _ = init_vuz(self.A, self.D, np.array(x), lbda)
+        u = check_tensor(u, device=self.device)
 
         for layer_params in self.layers_parameters[:output_layer]:
             # retrieve parameters
             step_size = layer_params['step_size']
-            mul_lbda = layer_params.get('threshold', 1.0)
 
             # apply one 'iteration'
-            if Lz_hat is None:  # equivalent to initialized to Lz_hat = 0
-                Lz_hat = step_size * x
-            else:
-                residual = Lz_hat - x
-                reg = Lz_hat.matmul(self.D_).sign().matmul(self.D_.t())
-                grad = residual + (lbda * mul_lbda) * reg
-                Lz_hat = Lz_hat - step_size * grad
+            residual = (u.matmul(self.A_) - x).matmul(self.A_.t())
+            reg = u.matmul(self.D_).sign().matmul(self.D_.t())
+            grad = residual + lbda * reg
+            u = u - step_size * grad
 
-        return Lz_hat
+        return u
 
     def transform(self, x, lbda, output_layer=None):
-        """ Compute the output of the network, given x and regularization lbda
-
-        Parameters
-        ----------
-        x : ndarray, shape (n_samples, n_dim)
-            input of the network.
-        lbda: float
-            Regularization level for the optimization problem.
-        output_layer : int (default: None)
-            Layer to output from. It should be smaller than the number of
-            layers of the network. If set to None, output the last layer of the
-            network.
-        """
         with torch.no_grad():
             return self(x, lbda, output_layer=output_layer).cpu().numpy()
 
-    def _loss_fn(self, x, lbda, z_hat):
+    def _loss_fn(self, x, lbda, z):
         """ Target loss function. """
         n_samples = x.shape[0]
-
         x = check_tensor(x, device=self.device)
-        Lz_hat = check_tensor(z_hat, device=self.device)
-
-        residual = Lz_hat - x
+        z = check_tensor(z, device=self.device)
+        residual = z.matmul(self.A_) - x
         loss = 0.5 * (residual * residual).sum()
-        reg = lbda * torch.abs(Lz_hat.matmul(self.D_)).sum()
+        reg = lbda * torch.abs(z.matmul(self.D_)).sum()
         return (loss + reg) / n_samples
 
 
-class LChambolleTV(ListaBase):
+class OrigChambolleTV(ListaBase):
     __doc__ = DOC_LISTA.format(
                 type='learned-TV Chambolle original',
                 problem_name='TV',
                 descr='original parametrization from Gregor and Le Cun (2010)'
                 )
 
-    def __init__(self, D, n_layers, learn_th=True, solver="gradient_descent",
-                 max_iter=100, per_layer="recursive", initial_parameters=[],
-                 name="learned-TV Chambolle original", ctx=None, verbose=0,
-                 device=None):
-        super().__init__(D=D, n_layers=n_layers, learn_th=learn_th,
-                         solver=solver, max_iter=max_iter, per_layer=per_layer,
+    def __init__(self, A, n_layers, learn_th=True, max_iter=100,
+                 net_solver_type="recursive", initial_parameters=[],
+                 name="learned-TV Chambolle original", verbose=0, device=None):
+
+        n_atoms = A.shape[0]
+        self.A = np.array(A)
+        self.D = (np.eye(n_atoms, k=-1) - np.eye(n_atoms, k=0))[:, :-1]
+
+        self.A_ = check_tensor(self.A, device=device)
+        self.D_ = check_tensor(self.D, device=device)
+
+        self.Psi_A = np.linalg.pinv(self.A).dot(self.D)
+        self.Psi_AtPsi_A = self.Psi_A.T.dot(self.Psi_A)
+
+        self.Psi_A_ = check_tensor(self.Psi_A, device=device)
+        self.Psi_AtPsi_A_ = check_tensor(self.Psi_AtPsi_A, device=device)
+
+        self.l_ = np.linalg.norm(self.Psi_AtPsi_A, ord=2)
+
+        super().__init__(n_layers=n_layers, learn_th=learn_th,
+                         max_iter=max_iter, net_solver_type=net_solver_type,
                          initial_parameters=initial_parameters, name=name,
-                         ctx=ctx, verbose=verbose, device=device)
+                         verbose=verbose, device=device)
 
     def _init_network_parameters(self, initial_parameters=[]):
         """ Initialize the parameters of the network. """
-        DtD = self.D.T.dot(self.D)
-        Ik = np.eye(DtD.shape[0])
+        n_atoms = self.D.shape[1]
+        I_k = np.eye(n_atoms)
 
-        parameters_config = dict(threshold=[], Wx=[], Wz=[])
+        parameters_config = dict(threshold=[], Wx=[], Wv=[])
 
         self.layers_parameters = []
         for layer in range(self.n_layers):
@@ -129,8 +136,8 @@ class LChambolleTV(ListaBase):
                 layer_params = dict()
                 if self.learn_th:
                     layer_params['threshold'] = np.array(1.0)
-                layer_params['Wz'] = Ik - DtD / self.L
-                layer_params['Wx'] = self.D / self.L
+                layer_params['Wv'] = I_k - self.Psi_AtPsi_A / self.l_
+                layer_params['Wx'] = self.Psi_A / self.l_
 
             layer_params = self._tensorized_and_hooked_parameters(
                                         layer, layer_params, parameters_config)
@@ -138,56 +145,41 @@ class LChambolleTV(ListaBase):
 
     def forward(self, x, lbda, output_layer=None):
         """ Forward pass of the network. """
+        # check inputs
         x, output_layer = self._check_forward_inputs(
                                             x, output_layer, enable_none=True)
 
-        v_hat = None  # v0 = 0  # implicitly
+        # initialized variables
+        v, _, _ = init_vuz(self.A, self.D, np.array(x), lbda)
+        v = check_tensor(v, device=self.device)
 
         for layer_params in self.layers_parameters[:output_layer]:
             # retrieve parameters
-            mul_lbda = layer_params.get('threshold', 1.0)
+            mul_lbda = float(layer_params.get('threshold', 1.0))
             Wx = layer_params['Wx']
-            Wz = layer_params['Wz']
-            x_ = x / (lbda * mul_lbda)
+            Wv = layer_params['Wv']
 
             # apply one 'dual iteration'
-            if v_hat is None:  # equivalent to initialized to v_hat = 0
-                v_hat = x_.matmul(Wx)
-            else:
-                v_hat = v_hat.matmul(Wz) + x_.matmul(Wx)
-                v_hat = torch.clamp(v_hat, -1.0, 1.0)
+            v = v.matmul(Wv) + x.matmul(Wx)
+            v = torch.clamp(v, -lbda * mul_lbda, lbda * mul_lbda)
 
-        return v_hat
+        return v
 
     def transform(self, x, lbda, output_layer=None):
-        """ Compute the output of the network, given x and regularization lbda
-
-        Parameters
-        ----------
-        x : ndarray, shape (n_samples, n_dim)
-            input of the network.
-        lbda: float
-            Regularization level for the optimization problem.
-        output_layer : int (default: None)
-            Layer to output from. It should be smaller than the number of
-            layers of the network. If set to None, output the last layer of the
-            network.
-        """
         with torch.no_grad():
-            v_hat = self(x, lbda, output_layer=output_layer).cpu().numpy()
-            return x - lbda * v_hat.dot(self.D.T)
+            v = self(x, lbda, output_layer=output_layer).cpu().numpy()
+            return v_to_u(v, x, lbda, A=self.A, D=self.D)
 
-    def _loss_fn(self, x, lbda, v_hat):
+    def _loss_fn(self, x, lbda, v):
         """ Target loss function. """
         n_samples = x.shape[0]
-
         x = check_tensor(x, device=self.device)
-        v_hat = check_tensor(v_hat, device=self.device)
-        v_hat = torch.clamp(v_hat, -1.0, 1.0)
-
-        if (torch.abs(v_hat) <= 1.0).all():
-            residual = v_hat.matmul(self.D_.t()) - x / lbda  # dual formulation
-            return 0.5 * (residual * residual).sum() / n_samples
+        v = check_tensor(v, device=self.device)
+        if (torch.abs(v) <= lbda).all():
+            residual = v.matmul(self.Psi_A_.t())
+            cost = 0.5 * (residual * residual).sum()
+            cost += torch.diag(-x.matmul(self.Psi_A_).matmul(v.t())).sum()
+            return cost / n_samples
         else:
             return torch.tensor([np.inf])
 
@@ -199,15 +191,29 @@ class CoupledChambolleTV(ListaBase):
                                       'et al (2018)'),
                                )
 
-    def __init__(self, D, n_layers, learn_th=True, solver="gradient_descent",
-                 max_iter=100, per_layer="recursive", initial_parameters=[],
-                 name="learned-TV Chambolle-Coupled", ctx=None, verbose=0,
-                 device=None):
-        super().__init__(D=D, n_layers=n_layers, learn_th=learn_th,
-                         solver=solver, max_iter=max_iter,
-                         per_layer=per_layer,
+    def __init__(self, A, n_layers, learn_th=True,  max_iter=100,
+                 net_solver_type="recursive", initial_parameters=[],
+                 name="learned-TV Chambolle-Coupled", verbose=0, device=None):
+
+        n_atoms = A.shape[0]
+        self.A = np.array(A)
+        self.D = (np.eye(n_atoms, k=-1) - np.eye(n_atoms, k=0))[:, :-1]
+
+        self.A_ = check_tensor(self.A, device=device)
+        self.D_ = check_tensor(self.D, device=device)
+
+        self.Psi_A = np.linalg.pinv(self.A).dot(self.D)
+        self.Psi_AtPsi_A = self.Psi_A.T.dot(self.Psi_A)
+
+        self.Psi_A_ = check_tensor(self.Psi_A, device=device)
+        self.Psi_AtPsi_A_ = check_tensor(self.Psi_AtPsi_A, device=device)
+
+        self.l_ = np.linalg.norm(self.Psi_AtPsi_A, ord=2)
+
+        super().__init__(n_layers=n_layers, learn_th=learn_th,
+                         max_iter=max_iter, net_solver_type=net_solver_type,
                          initial_parameters=initial_parameters, name=name,
-                         ctx=ctx, verbose=verbose, device=device)
+                         verbose=verbose, device=device)
 
     def _init_network_parameters(self, initial_parameters=[]):
         """ Initialize the parameters of the network. """
@@ -221,7 +227,7 @@ class CoupledChambolleTV(ListaBase):
                 layer_params = dict()
                 if self.learn_th:
                     layer_params['threshold'] = np.array(1.0)
-                layer_params['W_coupled'] = self.D / self.L
+                layer_params['W_coupled'] = self.Psi_A / self.l_
 
             layer_params = self._tensorized_and_hooked_parameters(
                                         layer, layer_params, parameters_config)
@@ -229,56 +235,41 @@ class CoupledChambolleTV(ListaBase):
 
     def forward(self, x, lbda, output_layer=None):
         """ Forward pass of the network. """
+        # check inputs
         x, output_layer = self._check_forward_inputs(
                                             x, output_layer, enable_none=True)
 
-        v_hat = None  # v0 = 0  # implicitly
+        # initialized variables
+        v, _, _ = init_vuz(self.A, self.D, np.array(x), lbda)
+        v = check_tensor(v, device=self.device)
 
         for layer_params in self.layers_parameters[:output_layer]:
             # retrieve parameters
             W = layer_params['W_coupled']
-            mul_lbda = layer_params.get('threshold', 1.0)
-            x_ = x / (lbda * mul_lbda)
+            mul_lbda = float(layer_params.get('threshold', 1.0))
 
             # apply one 'dual iteration'
-            if v_hat is None:  # equivalent to initialized to v_hat = 0
-                v_hat = x_.matmul(W)
-            else:
-                residual = v_hat.matmul(self.D_.t()) - x_
-                v_hat = v_hat - residual.matmul(W)
-                v_hat = torch.clamp(v_hat, -1.0, 1.0)
+            residual = v.matmul(self.Psi_A_.t()) - x
+            v = v - residual.matmul(W)
+            v = torch.clamp(v, -lbda * mul_lbda, lbda * mul_lbda)
 
-        return v_hat
+        return v
 
     def transform(self, x, lbda, output_layer=None):
-        """ Compute the output of the network, given x and regularization lbda
-
-        Parameters
-        ----------
-        x : ndarray, shape (n_samples, n_dim)
-            input of the network.
-        lbda: float
-            Regularization level for the optimization problem.
-        output_layer : int (default: None)
-            Layer to output from. It should be smaller than the number of
-            layers of the network. If set to None, output the last layer of the
-            network.
-        """
         with torch.no_grad():
-            v_hat = self(x, lbda, output_layer=output_layer).cpu().numpy()
-            return x - lbda * v_hat.dot(self.D.T)
+            v = self(x, lbda, output_layer=output_layer).cpu().numpy()
+            return v_to_u(v, x, lbda, A=self.A, D=self.D)
 
-    def _loss_fn(self, x, lbda, v_hat):
+    def _loss_fn(self, x, lbda, v):
         """ Target loss function. """
         n_samples = x.shape[0]
-
         x = check_tensor(x, device=self.device)
-        v_hat = check_tensor(v_hat, device=self.device)
-        v_hat = torch.clamp(v_hat, -1.0, 1.0)
-
-        if (torch.abs(v_hat) <= 1.0).all():
-            residual = v_hat.matmul(self.D_.t()) - x / lbda  # dual formulation
-            return 0.5 * (residual * residual).sum() / n_samples
+        v = check_tensor(v, device=self.device)
+        if (torch.abs(v) <= lbda).all():
+            residual = v.matmul(self.Psi_A_.t())
+            cost = 0.5 * (residual * residual).sum()
+            cost += torch.diag(- x.matmul(self.Psi_A_).matmul(v.t())).sum()
+            return cost / n_samples
         else:
             return torch.tensor([np.inf])
 
@@ -290,15 +281,29 @@ class StepChambolleTV(ListaBase):
                                       'Chambolle dual algorithm'),
                                )
 
-    def __init__(self, D, n_layers, learn_th=True, solver="gradient_descent",
-                 max_iter=100, per_layer="one_shot", initial_parameters=[],
-                 name="learned-TV Chambolle-Step", ctx=None, verbose=0,
-                 device=None):
-        super().__init__(D=D, n_layers=n_layers, learn_th=learn_th,
-                         solver=solver, max_iter=max_iter,
-                         per_layer=per_layer,
+    def __init__(self, A, n_layers, learn_th=True, max_iter=100,
+                 net_solver_type="one_shot", initial_parameters=[],
+                 name="learned-TV Chambolle-Step", verbose=0, device=None):
+
+        n_atoms = A.shape[0]
+        self.A = np.array(A)
+        self.D = (np.eye(n_atoms, k=-1) - np.eye(n_atoms, k=0))[:, :-1]
+
+        self.A_ = check_tensor(self.A, device=device)
+        self.D_ = check_tensor(self.D, device=device)
+
+        self.Psi_A = np.linalg.pinv(self.A).dot(self.D)
+        self.Psi_AtPsi_A = self.Psi_A.T.dot(self.Psi_A)
+
+        self.Psi_A_ = check_tensor(self.Psi_A, device=device)
+        self.Psi_AtPsi_A_ = check_tensor(self.Psi_AtPsi_A, device=device)
+
+        self.l_ = np.linalg.norm(self.Psi_AtPsi_A, ord=2)
+
+        super().__init__(n_layers=n_layers, learn_th=learn_th,
+                         max_iter=max_iter, net_solver_type=net_solver_type,
                          initial_parameters=initial_parameters, name=name,
-                         ctx=ctx, verbose=verbose, device=device)
+                         verbose=verbose, device=device)
 
     def _init_network_parameters(self, initial_parameters=[]):
         """ Initialize the parameters of the network. """
@@ -312,7 +317,7 @@ class StepChambolleTV(ListaBase):
                 layer_params = dict()
                 if self.learn_th:
                     layer_params['threshold'] = np.array(1.0)
-                layer_params['step_size'] = np.array(1.0 / self.L)
+                layer_params['step_size'] = np.array(1.0 / self.l_)
 
             layer_params = self._tensorized_and_hooked_parameters(
                                         layer, layer_params, parameters_config)
@@ -320,58 +325,42 @@ class StepChambolleTV(ListaBase):
 
     def forward(self, x, lbda, output_layer=None):
         """ Forward pass of the network. """
-        # fixer correctement les init
+        # check inputs
         x, output_layer = self._check_forward_inputs(
                                              x, output_layer, enable_none=True)
 
-        v_hat = None  # v0 = 0  # implicitly
+        # initialized variables
+        v, _, _ = init_vuz(self.A, self.D, np.array(x), lbda)
+        v = check_tensor(v, device=self.device)
 
         for layer_params in self.layers_parameters[:output_layer]:
             # retrieve parameters
             step_size = layer_params['step_size']
-            mul_lbda = layer_params.get('threshold', 1.0)
-            W = self.D_ * step_size
-            x_ = x / (lbda * mul_lbda)
+            mul_lbda = float(layer_params.get('threshold', 1.0))
+            W = self.Psi_A_ * step_size
 
             # apply one 'dual iteration'
-            if v_hat is None:  # equivalent to initialized to v_hat = 0
-                v_hat = x_.matmul(W)
-            else:
-                residual = v_hat.matmul(self.D_.t()) - x_
-                v_hat = v_hat - residual.matmul(W)
-                v_hat = torch.clamp(v_hat, -1.0, 1.0)
+            residual = v.matmul(self.Psi_A_.t()) - x
+            v = v - residual.matmul(W)
+            v = torch.clamp(v, -lbda * mul_lbda, lbda * mul_lbda)
 
-        return v_hat
+        return v
 
     def transform(self, x, lbda, output_layer=None):
-        """ Compute the output of the network, given x and regularization lbda
-
-        Parameters
-        ----------
-        x : ndarray, shape (n_samples, n_dim)
-            input of the network.
-        lbda: float
-            Regularization level for the optimization problem.
-        output_layer : int (default: None)
-            Layer to output from. It should be smaller than the number of
-            layers of the network. If set to None, output the last layer of the
-            network.
-        """
         with torch.no_grad():
-            v_hat = self(x, lbda, output_layer=output_layer).cpu().numpy()
-            return x - lbda * v_hat.dot(self.D.T)
+            v = self(x, lbda, output_layer=output_layer).cpu().numpy()
+            return v_to_u(v, x, lbda, A=self.A, D=self.D)
 
-    def _loss_fn(self, x, lbda, v_hat):
+    def _loss_fn(self, x, lbda, v):
         """ Target loss function. """
         n_samples = x.shape[0]
-
         x = check_tensor(x, device=self.device)
-        v_hat = check_tensor(v_hat, device=self.device)
-        v_hat = torch.clamp(v_hat, -1.0, 1.0)
-
-        if (torch.abs(v_hat) <= 1.0).all():
-            residual = v_hat.matmul(self.D_.t()) - x / lbda  # dual formulation
-            return 0.5 * (residual * residual).sum() / n_samples
+        v = check_tensor(v, device=self.device)
+        if (torch.abs(v) <= lbda).all():
+            residual = v.matmul(self.Psi_A_.t())
+            cost = 0.5 * (residual * residual).sum()
+            cost += torch.diag(- x.matmul(self.Psi_A_).matmul(v.t())).sum()
+            return cost / n_samples
         else:
             return torch.tensor([np.inf])
 
@@ -383,14 +372,24 @@ class CoupledCondatVu(ListaBase):
                                       'et al (2018)'),
                                )
 
-    def __init__(self, D, n_layers, learn_th=True, solver="gradient_descent",
-                 max_iter=100, per_layer="recursive", initial_parameters=[],
-                 name="learned-Condat-Vu-coupled", ctx=None, verbose=0, device=None):
-        super().__init__(D=D, n_layers=n_layers, learn_th=learn_th,
-                         solver=solver, max_iter=max_iter,
-                         per_layer=per_layer,
+    def __init__(self, A, n_layers, learn_th=True, max_iter=100,
+                 net_solver_type="recursive", initial_parameters=[],
+                 name="learned-Condat-Vu-coupled", verbose=0, device=None):
+
+        n_atoms = A.shape[0]
+        self.A = np.array(A)
+        self.D = (np.eye(n_atoms, k=-1) - np.eye(n_atoms, k=0))[:, :-1]
+
+        self.A_ = check_tensor(self.A, device=device)
+        self.D_ = check_tensor(self.D, device=device)
+
+        self.l_A = np.linalg.norm(self.A.dot(self.A.T), ord=2)
+        self.l_D = np.linalg.norm(self.D.dot(self.D.T), ord=2)
+
+        super().__init__(n_layers=n_layers, learn_th=learn_th,
+                         max_iter=max_iter, net_solver_type=net_solver_type,
                          initial_parameters=initial_parameters, name=name,
-                         ctx=ctx, verbose=verbose, device=device)
+                         verbose=verbose, device=device)
 
     def _init_network_parameters(self, initial_parameters=[]):
         """ Initialize the parameters of the network. """
@@ -398,8 +397,7 @@ class CoupledCondatVu(ListaBase):
 
         self.rho = 1.0
         self.sigma = 0.5
-        L_D, L_I = self.L, 1.0  # lipschtiz constant
-        self.tau = 1.0 / (L_I / 2.0 + self.sigma * L_D**2)
+        self.tau = 1.0 / (self.l_A / 2.0 + self.sigma * self.l_D**2)
 
         self.layers_parameters = []
         for layer in range(self.n_layers):
@@ -417,65 +415,55 @@ class CoupledCondatVu(ListaBase):
 
     def forward(self, x, lbda, output_layer=None):
         """ Forward pass of the network. """
-        # fixer correctement les init
+        # check inputs
         x, output_layer = self._check_forward_inputs(
                                              x, output_layer, enable_none=True)
 
-        Lz_hat = Lz_hat_old = x
-        n_samples, n_dim = x.shape[0], self.D.shape[1]
-        v_hat = v_hat_old = torch.zeros(
-                                    (n_samples, n_dim), dtype=torch.float64)
+        # initialized variables
+        v, u, _ = init_vuz(self.A, self.D, np.array(x), lbda)
+        u_old, v_old = np.copy(u), np.copy(v)
+        v = check_tensor(v, device=self.device)
+        v_old = check_tensor(v_old, device=self.device)
+        u = check_tensor(u, device=self.device)
+        u_old = check_tensor(u_old, device=self.device)
 
         for layer_params in self.layers_parameters[:output_layer]:
             # retrieve parameters
             W = layer_params['W_coupled']
             mul_lbda = layer_params.get('threshold', 1.0)
+            sigma = self.sigma
+            tau = self.tau
+            rho = self.rho
 
-            # apply one 'primal and dual iteration'
             # primal descent
-            Lz_hat_new = (Lz_hat_old - self.tau * (Lz_hat_old - x) -
-                          self.tau * v_hat_old.matmul(W.t()))
+            u_new = u_old + (
+                - tau * (u_old.matmul(self.A_) - x).matmul(self.A_.t())
+                - tau * v_old.matmul(W.t()))
             # dual ascent
-            v_hat_ = (v_hat_old +
-                    self.sigma * (2 * Lz_hat_new - Lz_hat_old).matmul(W))
-            v_hat_new = v_hat_ - self.sigma * pseudo_soft_th_tensor(
-                        v_hat_ / self.sigma, lbda * mul_lbda, 1.0 / self.sigma)
+            v_ = v_old + sigma * (2 * u_new - u_old).matmul(W)
+            v_new = v_ - sigma * pseudo_soft_th_tensor(
+                v_ / sigma, lbda * mul_lbda, 1.0 / sigma)
             # update
-            Lz_hat = self.rho * Lz_hat_new + (1.0 - self.rho) * Lz_hat_old
-            v_hat = self.rho * v_hat_new + (1.0 - self.rho) * v_hat_old
+            u = rho * u_new + (1.0 - rho) * u_old
+            v = rho * v_new + (1.0 - rho) * v_old
             # storing
-            Lz_hat_old = Lz_hat
-            v_hat_old = v_hat
+            u_old = u
+            v_old = v
 
-        return Lz_hat
+        return u
 
     def transform(self, x, lbda, output_layer=None):
-        """ Compute the output of the network, given x and regularization lbda
-
-        Parameters
-        ----------
-        x : ndarray, shape (n_samples, n_dim)
-            input of the network.
-        lbda: float
-            Regularization level for the optimization problem.
-        output_layer : int (default: None)
-            Layer to output from. It should be smaller than the number of
-            layers of the network. If set to None, output the last layer of the
-            network.
-        """
         with torch.no_grad():
             return self(x, lbda, output_layer=output_layer).cpu().numpy()
 
-    def _loss_fn(self, x, lbda, z_hat):
+    def _loss_fn(self, x, lbda, z):
         """ Target loss function. """
         n_samples = x.shape[0]
-
         x = check_tensor(x, device=self.device)
-        Lz_hat = check_tensor(z_hat, device=self.device)
-
-        residual = Lz_hat - x
+        z = check_tensor(z, device=self.device)
+        residual = z.matmul(self.A_) - x
         loss = 0.5 * (residual * residual).sum()
-        reg = torch.abs(Lz_hat.matmul(self.D_)).sum()
+        reg = torch.abs(z.matmul(self.D_)).sum()
         return (loss + lbda * reg) / n_samples
 
 
@@ -485,14 +473,27 @@ class StepCondatVu(ListaBase):
                                descr=('Primal and dual step learn'),
                                )
 
-    def __init__(self, D, n_layers, learn_th=True, solver="gradient_descent",
-                 max_iter=100, per_layer="one_shot", initial_parameters=[],
-                 name="learned-Condat-Vu-step", ctx=None, verbose=0, device=None):
-        super().__init__(D=D, n_layers=n_layers, learn_th=learn_th,
-                         solver=solver, max_iter=max_iter,
-                         per_layer=per_layer,
+    def __init__(self, A, n_layers, learn_th=False, max_iter=100,
+                 net_solver_type="one_shot", initial_parameters=[],
+                 name="learned-Condat-Vu-step", verbose=0, device=None):
+
+        n_atoms = A.shape[0]
+        self.A = np.array(A)
+        self.D = (np.eye(n_atoms, k=-1) - np.eye(n_atoms, k=0))[:, :-1]
+
+        self.A_ = check_tensor(self.A, device=device)
+        self.D_ = check_tensor(self.D, device=device)
+
+        self.l_A = np.linalg.norm(self.A.dot(self.A.T), ord=2)
+        self.l_D = np.linalg.norm(self.D.dot(self.D.T), ord=2)
+
+        if learn_th:
+            print("In StepIstaLASSO learn_th can't be enable, ignore it.")
+
+        super().__init__(n_layers=n_layers, learn_th=False,
+                         max_iter=max_iter, net_solver_type=net_solver_type,
                          initial_parameters=initial_parameters, name=name,
-                         ctx=ctx, verbose=verbose, device=device)
+                         verbose=verbose, device=device)
 
     def _init_network_parameters(self, initial_parameters=[]):
         """ Initialize the parameters of the network. """
@@ -514,70 +515,52 @@ class StepCondatVu(ListaBase):
 
     def forward(self, x, lbda, output_layer=None):
         """ Forward pass of the network. """
-        # fixer correctement les init
-        x, output_layer = self._check_forward_inputs(
-                                             x, output_layer, enable_none=True)
+        # check inputs
+        x, output_layer = self._check_forward_inputs(x, output_layer,
+                                                     enable_none=True)
 
-        Lz_hat = Lz_hat_old = x
-        n_samples, n_dim = x.shape[0], self.D.shape[1]
-        v_hat = v_hat_old = torch.zeros(
-                                    (n_samples, n_dim), dtype=torch.float64)
+        # initialized variables
+        v, u, _ = init_vuz(self.A, self.D, np.array(x), lbda)
+        u_old, v_old = np.copy(u), np.copy(v)
+        v = check_tensor(v, device=self.device)
+        v_old = check_tensor(v_old, device=self.device)
+        u = check_tensor(u, device=self.device)
+        u_old = check_tensor(u_old, device=self.device)
 
         for layer_params in self.layers_parameters[:output_layer]:
             # retrieve parameters
             sigma = layer_params['sigma']
-            L_D, L_I = self.L, 1.0  # lipschtiz constant
-            tau = 1.0 / (L_I / 2.0 + sigma * L_D**2)
+            sigma = torch.clamp(sigma, 0.5, 2.0)  # TODO constraint learning
+            tau = 1.0 / (self.l_A / 2.0 + sigma * self.l_D**2)
+            rho = self.rho
 
-            # apply one 'primal and dual iteration'
             # primal descent
-            Lz_hat_new = (Lz_hat_old - tau * (Lz_hat_old - x) -
-                          tau * v_hat_old.matmul(self.D_.t()))
+            u_new = u_old + (
+                - tau * (u_old.matmul(self.A_) - x).matmul(self.A_.t())
+                - tau * v_old.matmul(self.D_.t()))
             # dual ascent
-            v_hat_ = (v_hat_old +
-                      sigma * (2 * Lz_hat_new - Lz_hat_old).matmul(self.D_))
-            v_hat_new = v_hat_ - sigma * pseudo_soft_th_tensor(
-                         v_hat_ / sigma, lbda, 1.0 / sigma)
+            v_ = v_old + sigma * (2 * u_new - u_old).matmul(self.D_)
+            v_new = v_ - sigma * pseudo_soft_th_tensor(
+                v_ / sigma, lbda, 1.0 / sigma)
             # update
-            Lz_hat = self.rho * Lz_hat_new + (1.0 - self.rho) * Lz_hat_old
-            v_hat = self.rho * v_hat_new + (1.0 - self.rho) * v_hat_old
+            u = rho * u_new + (1.0 - rho) * u_old
+            v = rho * v_new + (1.0 - rho) * v_old
             # storing
-            Lz_hat_old = Lz_hat
-            v_hat_old = v_hat
+            u_old = u
+            v_old = v
 
-        return Lz_hat
+        return u
 
     def transform(self, x, lbda, output_layer=None):
-        """ Compute the output of the network, given x and regularization lbda
-
-        Parameters
-        ----------
-        x : ndarray, shape (n_samples, n_dim)
-            input of the network.
-        lbda: float
-            Regularization level for the optimization problem.
-        output_layer : int (default: None)
-            Layer to output from. It should be smaller than the number of
-            layers of the network. If set to None, output the last layer of the
-            network.
-        """
         with torch.no_grad():
             return self(x, lbda, output_layer=output_layer).cpu().numpy()
 
-    def _loss_fn(self, x, lbda, z_hat):
+    def _loss_fn(self, x, lbda, z):
         """ Target loss function. """
         n_samples = x.shape[0]
-
         x = check_tensor(x, device=self.device)
-        Lz_hat = check_tensor(z_hat, device=self.device)
-
-        residual = Lz_hat - x
+        z = check_tensor(z, device=self.device)
+        residual = z.matmul(self.A_) - x
         loss = 0.5 * (residual * residual).sum()
-        reg = torch.abs(Lz_hat.matmul(self.D_)).sum()
+        reg = torch.abs(z.matmul(self.D_)).sum()
         return (loss + lbda * reg) / n_samples
-
-
-ALL_LTV = dict(stepsubgradient=StepSubGradTV, lchambolle=LChambolleTV,
-               coupledchambolle=CoupledChambolleTV,
-               stepchambolle=StepChambolleTV, coupledcondatvu=CoupledCondatVu,
-               stepcondatvu=StepCondatVu)

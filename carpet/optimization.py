@@ -16,7 +16,7 @@ def condatvu(grad, obj, prox, psi, adj_psi, v0, z0, lbda, sigma, tau, rho=1.0,
 
     # saving variables
     dg, pobj_, times_ = [np.linalg.norm(psi(z0) - v0)], [obj(z_old)], [0.0]
-    saved_z_,saved_v_ = [z0], [v0]
+    saved_z_, saved_v_ = [z0], [v0]
 
     for ii in range(max_iter):
 

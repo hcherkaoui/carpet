@@ -35,7 +35,6 @@ def add_gaussian_noise(signal, snr, random_state=None):
     std_dev = (1.0 / np.sqrt(10**(snr/10.0))) * true_snr
     noise = std_dev * noise
     noisy_signal = signal + noise
-
     return noisy_signal, noise
 
 
@@ -49,49 +48,69 @@ def _generate_dirac(m=100, s=0.1, rng=None):
     return z
 
 
-def _generate_1d_signal(D, s=0.1, snr=1.0, rng=None):
+def _generate_1d_signal(A, L, s=0.1, snr=1.0, rng=None):
     """ Generate one 1d synthetic signal. """
-    z = _generate_dirac(m=D.shape[0], s=s, rng=rng)
-    Dz = z.dot(D)
-    x, _ = add_gaussian_noise(signal=Dz, snr=snr, random_state=rng)
-    return x[None, :], Dz[None, :], z[None, :]
+    m = L.shape[0]
+    z = _generate_dirac(m=m, s=s, rng=rng)
+    u = z.dot(L)
+    x, _ = add_gaussian_noise(signal=u.dot(A), snr=snr, random_state=rng)
+    return x[None, :], u[None, :], z[None, :]
 
 
-def synthetic_1d_dataset(D, n=1000, s=0.1, snr=1.0, seed=None, n_jobs=1):
+def synthetic_1d_dataset(n_atoms=10, n_dim=20, A=None, n=1000, s=0.1, snr=1.0,
+                         seed=None, n_jobs=1):
     """ Generate n samples of 1d synthetic signal.
 
     Parameters
     ----------
-    D : np.array, shape=(m1, m2), dictionary
-    n : int, number of 1d signal to generate
-    s : float, sparsity of the derivative of the signal generated
-    snr : float, SNR of the signal generated
-    seed : int, random-seed used to initialize the random-instance
-    n_jobs : int, (default=1), number of CPU to use
+    n_atoms : int, (default=10), number of atoms
+    n_dim : int, (default=20), length of the obsersed signals
+    A : np.ndarray, (default=None), shape=(n_atoms, n_dim)
+        manually set observation matrix, if set to None, the function use
+        generate a random Gaussian matrix of dimension (n_atoms, n_dim)
+    n : int,
+        number of 1d signal to generate
+    s : float,
+        sparsity of the derivative of the signal generated
+    snr : float,
+        SNR of the signal generated
+    seed : int,
+        random-seed used to initialize the random-instance
+    n_jobs : int, (default=1),
+        number of CPU to use
 
     Return
     ------
-    x : numpy array, shape (n, m), noisy observation of the signal
+    x : numpy array, shape (n, n_dim), noisy observation of the signal
                  generated
-    Dz : numpy array, shape (n, m), signal
-    z : numpy array, shape (n, m), source signal
+    u : numpy array, shape (n, n_atoms), signal
+    z : numpy array, shape (n, n_atoms - 1), source signal
     """
     rng = check_random_state(seed)
 
+    # generate observation operator if needed
+    if A is None:
+        A = rng.randn(n_atoms, n_dim)
+        A /= np.linalg.norm(A, axis=1, keepdims=True)
+    else:
+        n_atoms = A.shape[0]
+
     # generate samples
-    params = dict(D=D, s=s, snr=snr, rng=rng)
+    L = np.triu(np.ones((n_atoms, n_atoms)))
+    D = (np.eye(n_atoms, k=-1) - np.eye(n_atoms, k=0))[:, :-1]
+    params = dict(A=A, L=L, s=s, snr=snr, rng=rng)
     results = Parallel(n_jobs=n_jobs)(delayed(_generate_1d_signal)(**params)
                                       for _ in range(n))
 
     # stack samples
-    x, Dz, z = [], [], []
-    for x_, Dz_, z_ in results:
+    x, u, z = [], [], []
+    for x_, u_, z_ in results:
         x.append(x_.ravel())
-        Dz.append(Dz_.ravel())
+        u.append(u_.ravel())
         z.append(z_.ravel())
-    x, Dz, z = np.c_[x], np.c_[Dz], np.c_[z]
+    x, u, z = np.c_[x], np.c_[u], np.c_[z]
 
     # lbda_max = 1.0 for each sample
-    x /= np.max(np.abs(x.dot(D.T)), axis=1, keepdims=True)
+    x /= np.max(np.abs(x.dot(A.T).dot(L.T)), axis=1, keepdims=True)
 
-    return x, Dz, z
+    return x, u, z, L, D, A
