@@ -21,6 +21,7 @@ build
 .pytest_cache
 __pycache__
 .cachedir
+.ipynb_checkpoints/
 
 # ignore example results
 *.png
