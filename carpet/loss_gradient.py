@@ -5,6 +5,18 @@
 import numpy as np
 
 
+def tv_reg(u, D):
+    """ TV regularization. """
+    u = np.atleast_2d(u)
+    return np.sum(np.abs(u.dot(D)))
+
+
+def l1_reg(z):
+    """ l1 norm regularization. """
+    z = np.atleast_2d(z)
+    return np.sum(np.abs(z))
+
+
 def analysis_dual_grad(v, A, D, x, lbda, Psi_A=None):
     """ Gradient for the dual formulation of the analysis problem. """
     v = np.atleast_2d(v)

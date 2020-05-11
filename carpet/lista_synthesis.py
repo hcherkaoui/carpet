@@ -51,7 +51,7 @@ class ListaLASSO(ListaBase):
             else:
                 layer_params = dict()
                 if self.learn_th:
-                    layer_params['threshold'] = np.array(1.0 / self.l_)
+                    layer_params['threshold'] = np.array(1.0)
                 layer_params['Wz'] = I_k - self.LA.dot(self.LA.T) / self.l_
                 layer_params['Wx'] = self.LA.T / self.l_
 
@@ -68,18 +68,18 @@ class ListaLASSO(ListaBase):
         # initialized variables
         n_atoms = self.A.shape[0]
         D = (np.eye(n_atoms, k=-1) - np.eye(n_atoms, k=0))[:, :-1]
-        _, _, z0 = init_vuz(self.A, D, np.array(x), lbda)
-        z = check_tensor(z0, device=self.device)
+        _, _, z = init_vuz(self.A, D, x, lbda, device=self.device)
 
         for layer_params in self.layers_parameters[:output_layer]:
             # retrieve parameters
+            step_size = 1.0 / self.l_
             mul_lbda = layer_params.get('threshold', 1.0)
             Wx = layer_params['Wx']
             Wz = layer_params['Wz']
 
             # apply one 'iteration'
             z = z.matmul(Wz) + x.matmul(Wx)
-            z = pseudo_soft_th_tensor(z, lbda, mul_lbda)
+            z = pseudo_soft_th_tensor(z, lbda * step_size, mul_lbda)
 
         return z
 
@@ -135,7 +135,7 @@ class CoupledIstaLASSO(ListaBase):
             else:
                 layer_params = dict()
                 if self.learn_th:
-                    layer_params['threshold'] = np.array(1.0 / self.l_)
+                    layer_params['threshold'] = np.array(1.0)
                 layer_params['W_coupled'] = self.LA.T / self.l_
 
             layer_params = self._tensorized_and_hooked_parameters(
@@ -151,18 +151,18 @@ class CoupledIstaLASSO(ListaBase):
         # initialized variables
         n_atoms = self.A.shape[0]
         D = (np.eye(n_atoms, k=-1) - np.eye(n_atoms, k=0))[:, :-1]
-        _, _, z0 = init_vuz(self.A, D, np.array(x), lbda)
-        z = check_tensor(z0, device=self.device)
+        _, _, z = init_vuz(self.A, D, x, lbda)
 
         for layer_params in self.layers_parameters[:output_layer]:
             # retrieve parameters
+            step_size = 1.0 / self.l_
             mul_lbda = layer_params.get('threshold', 1.0)
             W = layer_params['W_coupled']
 
             # apply one 'iteration'
             residual = z.matmul(self.L_).matmul(self.A_) - x
             z = z - residual.matmul(W)
-            z = pseudo_soft_th_tensor(z, lbda, mul_lbda)
+            z = pseudo_soft_th_tensor(z, lbda * step_size, mul_lbda)
 
         return z
 
@@ -235,8 +235,7 @@ class StepIstaLASSO(ListaBase):
         # initialized variables
         n_atoms = self.A.shape[0]
         D = (np.eye(n_atoms, k=-1) - np.eye(n_atoms, k=0))[:, :-1]
-        _, _, z0 = init_vuz(self.A, D, np.array(x), lbda)
-        z = check_tensor(z0, device=self.device)
+        _, _, z = init_vuz(self.A, D, x, lbda)
 
         for layer_params in self.layers_parameters[:output_layer]:
             # retrieve parameters
@@ -246,7 +245,7 @@ class StepIstaLASSO(ListaBase):
             # apply one 'iteration'
             residual = z.matmul(self.L_).matmul(self.A_) - x
             z = z - residual.matmul(W)
-            z = pseudo_soft_th_tensor(z, lbda, step_size)
+            z = pseudo_soft_th_tensor(z, lbda * step_size, 1.0)
 
         return z
 

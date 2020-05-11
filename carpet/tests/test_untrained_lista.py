@@ -72,6 +72,7 @@ def test_untrained_analysis_lista(lbda, parametrization, n):
         loss_untrained_condat.append(analysis_primal_obj(z, A, D, x, lbda))
     loss_untrained_condat = np.array(loss_untrained_condat)
 
+    v0, u0, _ = init_vuz(A, D, x, lbda, force_numpy=True)
     params = dict(
              grad=lambda u: analysis_primal_grad(u, A, x),
              obj=lambda u: analysis_primal_obj(u, A, D, x, lbda),

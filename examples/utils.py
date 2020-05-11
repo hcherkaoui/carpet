@@ -9,7 +9,7 @@ from carpet import LearnTVAlgo
 from carpet.utils import init_vuz, v_to_u
 from carpet.loss_gradient import (analysis_primal_obj, analysis_primal_grad,
                                   analysis_dual_grad, synthesis_primal_grad,
-                                  synthesis_primal_obj)
+                                  synthesis_primal_obj, tv_reg, l1_reg)
 from carpet.optimization import fista, condatvu
 from carpet.proximity import pseudo_soft_th_numpy
 
@@ -25,21 +25,18 @@ def learned_lasso_like_tv(x_train, x_test, A, D, L, lbda, all_n_layers, type_,
     train_loss_init = synthesis_primal_obj(z0_train, A, L, x_train, lbda)
     test_loss_init = synthesis_primal_obj(z0_test, A, L, x_test, lbda)
     train_loss, test_loss = [train_loss_init], [test_loss_init]
-
-    train_reg_init = np.sum(np.abs(z0_train))
-    test_reg_init = np.sum(np.abs(z0_test))
-    train_reg, test_reg = [train_reg_init], [test_reg_init]
+    train_reg, test_reg = [l1_reg(z0_train)], [l1_reg(z0_test)]
 
     for n_layers in all_n_layers:
 
         # declare network
         if params is not None:
             algo = LearnTVAlgo(algo_type=type_, A=A, n_layers=n_layers,
-                               max_iter=300, device='cpu',
+                               max_iter=500, device='cpu',
                                initial_parameters=params, verbose=0)
         else:
             algo = LearnTVAlgo(algo_type=type_, A=A, n_layers=n_layers,
-                               max_iter=300, device='cpu', verbose=0)
+                               max_iter=500, device='cpu', verbose=0)
 
         t0_ = time.time()
         algo.fit(x_train, lbda=lbda)
@@ -52,12 +49,12 @@ def learned_lasso_like_tv(x_train, x_test, A, D, L, lbda, all_n_layers, type_,
         z_train = algo.transform(x_train, lbda, output_layer=n_layers)
         train_loss_ = synthesis_primal_obj(z_train, A, L, x_train, lbda)
         train_loss.append(train_loss_)
-        train_reg.append(np.sum(np.abs(z_train)))
+        train_reg.append(l1_reg(z_train))
 
         z_test = algo.transform(x_test, lbda, output_layer=n_layers)
         test_loss_ = synthesis_primal_obj(z_test, A, L, x_test, lbda)
         test_loss.append(test_loss_)
-        test_reg.append(np.sum(np.abs(z_test)))
+        test_reg.append(l1_reg(z_test))
 
         if verbose > 0:
             print(f"[{algo.name}|layers#{n_layers:3d}] model fitted "
@@ -111,11 +108,11 @@ def lasso_like_tv(x_train, x_test, A, D, L, lbda, all_n_layers, type_,
     test_loss = test_loss[[0] + all_n_layers]
 
     saved_z_train = [saved_z_train[i] for i in [0] + all_n_layers]
-    train_reg = np.array([np.sum(np.abs(saved_z_train_))
+    train_reg = np.array([l1_reg(saved_z_train_)
                           for saved_z_train_ in saved_z_train])
 
     saved_z_test = [saved_z_test[i] for i in [0] + all_n_layers]
-    test_reg = np.array([np.sum(np.abs(saved_z_test_))
+    test_reg = np.array([l1_reg(saved_z_test_)
                          for saved_z_test_ in saved_z_test])
 
     if verbose > 0:
@@ -165,11 +162,11 @@ def analysis_tv(x_train, x_test, A, D, L, lbda, all_n_layers, type_,
     test_loss = test_loss[[0] + all_n_layers]
 
     saved_z_train = [saved_z_train[i] for i in [0] + all_n_layers]
-    train_reg = np.array([np.sum(np.abs(saved_z_train_))
+    train_reg = np.array([l1_reg(saved_z_train_)
                           for saved_z_train_ in saved_z_train])
 
     saved_z_test = [saved_z_test[i] for i in [0] + all_n_layers]
-    test_reg = np.array([np.sum(np.abs(saved_z_test_))
+    test_reg = np.array([l1_reg(saved_z_test_)
                          for saved_z_test_ in saved_z_test])
 
     if verbose > 0:
@@ -190,20 +187,18 @@ def learned_chambolle_tv(x_train, x_test, A, D, L, lbda, all_n_layers, type_,
     train_loss_init = analysis_primal_obj(u0_train, A, D, x_train, lbda)
     test_loss_init = analysis_primal_obj(u0_test, A, D, x_test, lbda)
     train_loss, test_loss = [train_loss_init], [test_loss_init]
-    train_reg_init = np.sum(np.abs(u0_train.dot(D)))
-    test_reg_init = np.sum(np.abs(u0_test.dot(D)))
-    train_reg, test_reg = [train_reg_init], [test_reg_init]
+    train_reg, test_reg = [tv_reg(u0_train, D)], [tv_reg(u0_test, D)]
 
     for n_layers in all_n_layers:
 
         # declare network
         if params is not None:
             algo = LearnTVAlgo(algo_type=type_, A=A, n_layers=n_layers,
-                               max_iter=300, device='cpu',
+                               max_iter=500, device='cpu',
                                initial_parameters=params, verbose=0)
         else:
             algo = LearnTVAlgo(algo_type=type_, A=A, n_layers=n_layers,
-                               max_iter=300, device='cpu', verbose=0)
+                               max_iter=500, device='cpu', verbose=0)
 
         t0_ = time.time()
         algo.fit(x_train, lbda=lbda)
@@ -216,12 +211,12 @@ def learned_chambolle_tv(x_train, x_test, A, D, L, lbda, all_n_layers, type_,
         u_train = algo.transform(x_train, lbda, output_layer=n_layers)
         train_loss_ = analysis_primal_obj(u_train, A, D, x_train, lbda)
         train_loss.append(train_loss_)
-        train_reg.append(np.sum(np.abs(u_train.dot(D))))
+        train_reg.append(tv_reg(u_train, D))
 
         u_test = algo.transform(x_test, lbda, output_layer=n_layers)
         test_loss_ = analysis_primal_obj(u_test, A, D, x_test, lbda)
         test_loss.append(test_loss_)
-        test_reg.append(np.sum(np.abs(u_test.dot(D))))
+        test_reg.append(tv_reg(u_test, D))
 
         if verbose > 0:
             print(f"[{algo.name}|layers#{n_layers:3d}] model fitted "
@@ -282,12 +277,12 @@ def chambolle_tv(x_train, x_test, A, D, L, lbda, all_n_layers, type_):
     saved_Lz_train = [
         v_to_u(saved_v_train[i], x_train, lbda, inv_A=inv_A, Psi_A=Psi_A)
         for i in [0] + all_n_layers]
-    train_reg = np.array([np.sum(np.abs(saved_Lz_train_.dot(D)))
+    train_reg = np.array([tv_reg(saved_Lz_train_, D)
                           for saved_Lz_train_ in saved_Lz_train])
     saved_Lz_test = [
         v_to_u(saved_v_test[i], x_test, lbda, inv_A=inv_A, Psi_A=Psi_A)
         for i in [0] + all_n_layers]
-    test_reg = np.array([np.sum(np.abs(saved_Lz_test_.dot(D)))
+    test_reg = np.array([tv_reg(saved_Lz_test_, D)
                          for saved_Lz_test_ in saved_Lz_test])
 
     print(f"[{name}] iterations finished train-loss={train_loss[-1]:.6e} "
@@ -306,8 +301,8 @@ def condatvu_tv(x_train, x_test, A, D, L, lbda, all_n_layers, type_,
     L_A = np.linalg.norm(A.dot(A.T), ord=2)
     tau = 1.0 / (L_A / 2.0 + sigma * L_D**2)
 
-    v0_test, u0_test, _ = init_vuz(A, D, x_test, lbda)
-    v0_train, u0_train, _ = init_vuz(A, D, x_train, lbda)
+    v0_test, u0_test, _ = init_vuz(A, D, x_test, lbda, force_numpy=True)
+    v0_train, u0_train, _ = init_vuz(A, D, x_train, lbda, force_numpy=True)
 
     if verbose > 0:
         print("[Condat-Vu iterative] training loss")
@@ -343,11 +338,11 @@ def condatvu_tv(x_train, x_test, A, D, L, lbda, all_n_layers, type_,
     test_loss = test_loss[[0] + all_n_layers]
 
     saved_Lz_train = [saved_Lz_train[i] for i in [0] + all_n_layers]
-    train_reg = np.array([np.sum(np.abs(saved_Lz_train_.dot(D)))
+    train_reg = np.array([tv_reg(saved_Lz_train_, D)
                           for saved_Lz_train_ in saved_Lz_train])
 
     saved_Lz_test = [saved_Lz_test[i] for i in [0] + all_n_layers]
-    test_reg = np.array([np.sum(np.abs(saved_Lz_test_.dot(D)))
+    test_reg = np.array([tv_reg(saved_Lz_test_, D)
                          for saved_Lz_test_ in saved_Lz_test])
 
     if verbose > 0:

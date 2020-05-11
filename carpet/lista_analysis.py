@@ -5,6 +5,7 @@
 import torch
 import numpy as np
 from .lista_base import ListaBase, DOC_LISTA
+from .lista_synthesis import ListaLASSO
 from .checks import check_tensor
 from .proximity import pseudo_soft_th_tensor
 from .utils import init_vuz, v_to_u
@@ -60,8 +61,7 @@ class StepSubGradTV(ListaBase):
                                             x, output_layer, enable_none=True)
 
         # initialized variables
-        _, u, _ = init_vuz(self.A, self.D, np.array(x), lbda)
-        u = check_tensor(u, device=self.device)
+        _, u, _ = init_vuz(self.A, self.D, x, lbda)
 
         for layer_params in self.layers_parameters[:output_layer]:
             # retrieve parameters
@@ -88,6 +88,97 @@ class StepSubGradTV(ListaBase):
         loss = 0.5 * (residual * residual).sum()
         reg = lbda * torch.abs(z.matmul(self.D_)).sum()
         return (loss + reg) / n_samples
+
+
+class ListaTV(ListaBase):
+    __doc__ = DOC_LISTA.format(
+                type='learned-TV original',
+                problem_name='TV',
+                descr='original parametrization from Gregor and Le Cun (2010)'
+                )
+
+    def __init__(self, A, n_layers, learn_th=True, max_iter=100,
+                 net_solver_type="recursive", initial_parameters=[],
+                 name="LISTA", verbose=0, device=None):
+
+        n_atoms = A.shape[0]
+
+        self.A = np.array(A)
+        self.D = (np.eye(n_atoms, k=-1) - np.eye(n_atoms, k=0))[:, :-1]
+        self.I_k = np.eye(n_atoms)
+        self.A_ = check_tensor(self.A, device=device)
+        self.D_ = check_tensor(self.D, device=device)
+        self.l_ = np.linalg.norm(self.A.dot(self.A.T), ord=2)
+
+        super().__init__(n_layers=n_layers, learn_th=learn_th,
+                         max_iter=max_iter, net_solver_type=net_solver_type,
+                         initial_parameters=initial_parameters, name=name,
+                         verbose=verbose, device=device)
+
+        self.prox_tv = ListaLASSO(A=self.I_k, n_layers=20, learn_th=True,
+                                  max_iter=100, net_solver_type="recursive",
+                                  initial_parameters=[], name="Prox-TV",
+                                  verbose=0, device=device)
+
+    def _init_network_parameters(self, initial_parameters=[]):
+        """ Initialize the parameters of the network. """
+        parameters_config = dict(threshold=[], Wx=[], Wu=[])
+
+        self.layers_parameters = []
+        for layer in range(self.n_layers):
+            if len(initial_parameters) > layer:
+                layer_params = initial_parameters[layer]
+            else:
+                layer_params = dict()
+                if self.learn_th:
+                    layer_params['threshold'] = np.array(1.0 / self.l_)
+                layer_params['Wu'] = self.I_k - self.A.dot(self.A.T) / self.l_
+                layer_params['Wx'] = self.A.T / self.l_
+
+            layer_params = self._tensorized_and_hooked_parameters(
+                                        layer, layer_params, parameters_config)
+            self.layers_parameters += [layer_params]
+
+    def fit(self, x, lbda):
+        x = check_tensor(x, device=self.device)
+        lbda = float(lbda)
+        self._fit_all_network_batch_gradient_descent(x, lbda)
+        return self
+
+    def forward(self, x, lbda, output_layer=None):
+        """ Forward pass of the network. """
+        # check inputs
+        x, output_layer = self._check_forward_inputs(
+                                            x, output_layer, enable_none=True)
+
+        # initialized variables
+        _, u, _ = init_vuz(self.A, self.D, x, lbda, device=self.device)
+
+        for layer_params in self.layers_parameters[:output_layer]:
+            # retrieve parameters
+            mul_lbda = layer_params.get('threshold', 1.0)
+            Wx = layer_params['Wx']
+            Wu = layer_params['Wu']
+
+            # apply one 'iteration'
+            u = u.matmul(Wu) + x.matmul(Wx)
+            u = self.prox_tv(x=u, lbda=float(lbda*mul_lbda))
+
+        return u
+
+    def transform(self, x, lbda, output_layer=None):
+        with torch.no_grad():
+            return self(x, lbda, output_layer=output_layer).cpu().numpy()
+
+    def _loss_fn(self, x, lbda, z):
+        """ Target loss function. """
+        n_samples = x.shape[0]
+        x = check_tensor(x, device=self.device)
+        z = check_tensor(z, device=self.device)
+        residual = z.matmul(self.A_) - x
+        loss = 0.5 * (residual * residual).sum()
+        reg = torch.abs(z.matmul(self.D_)).sum()
+        return (loss + lbda * reg) / n_samples
 
 
 class OrigChambolleTV(ListaBase):
@@ -150,8 +241,7 @@ class OrigChambolleTV(ListaBase):
                                             x, output_layer, enable_none=True)
 
         # initialized variables
-        v, _, _ = init_vuz(self.A, self.D, np.array(x), lbda)
-        v = check_tensor(v, device=self.device)
+        v, _, _ = init_vuz(self.A, self.D, x, lbda)
 
         for layer_params in self.layers_parameters[:output_layer]:
             # retrieve parameters
@@ -240,7 +330,7 @@ class CoupledChambolleTV(ListaBase):
                                             x, output_layer, enable_none=True)
 
         # initialized variables
-        v, _, _ = init_vuz(self.A, self.D, np.array(x), lbda)
+        v, _, _ = init_vuz(self.A, self.D, x, lbda)
         v = check_tensor(v, device=self.device)
 
         for layer_params in self.layers_parameters[:output_layer]:
@@ -330,8 +420,7 @@ class StepChambolleTV(ListaBase):
                                              x, output_layer, enable_none=True)
 
         # initialized variables
-        v, _, _ = init_vuz(self.A, self.D, np.array(x), lbda)
-        v = check_tensor(v, device=self.device)
+        v, _, _ = init_vuz(self.A, self.D, x, lbda)
 
         for layer_params in self.layers_parameters[:output_layer]:
             # retrieve parameters
@@ -420,12 +509,8 @@ class CoupledCondatVu(ListaBase):
                                              x, output_layer, enable_none=True)
 
         # initialized variables
-        v, u, _ = init_vuz(self.A, self.D, np.array(x), lbda)
-        u_old, v_old = np.copy(u), np.copy(v)
-        v = check_tensor(v, device=self.device)
-        v_old = check_tensor(v_old, device=self.device)
-        u = check_tensor(u, device=self.device)
-        u_old = check_tensor(u_old, device=self.device)
+        v, u, _ = init_vuz(self.A, self.D, x, lbda)
+        v_old, u_old, _ = init_vuz(self.A, self.D, x, lbda)
 
         for layer_params in self.layers_parameters[:output_layer]:
             # retrieve parameters
@@ -520,12 +605,8 @@ class StepCondatVu(ListaBase):
                                                      enable_none=True)
 
         # initialized variables
-        v, u, _ = init_vuz(self.A, self.D, np.array(x), lbda)
-        u_old, v_old = np.copy(u), np.copy(v)
-        v = check_tensor(v, device=self.device)
-        v_old = check_tensor(v_old, device=self.device)
-        u = check_tensor(u, device=self.device)
-        u_old = check_tensor(u_old, device=self.device)
+        v, u, _ = init_vuz(self.A, self.D, x, lbda)
+        v_old, u_old, _ = init_vuz(self.A, self.D, x, lbda)
 
         for layer_params in self.layers_parameters[:output_layer]:
             # retrieve parameters

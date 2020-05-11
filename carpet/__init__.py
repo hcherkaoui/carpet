@@ -3,7 +3,7 @@
 # License: BSD (3-clause)
 
 from .lista_synthesis import ListaLASSO, CoupledIstaLASSO, StepIstaLASSO
-from .lista_analysis import (StepSubGradTV, OrigChambolleTV,
+from .lista_analysis import (StepSubGradTV, ListaTV, OrigChambolleTV,
                              CoupledChambolleTV, StepChambolleTV,
                              CoupledCondatVu, StepCondatVu)
 
@@ -14,6 +14,7 @@ _ALL_ALGO_ = dict(origista=ListaLASSO,
                   coupledista=CoupledIstaLASSO,
                   stepista=StepIstaLASSO,
                   stepsubgradient=StepSubGradTV,
+                  origtv=ListaTV,
                   origchambolle=OrigChambolleTV,
                   coupledchambolle=CoupledChambolleTV,
                   stepchambolle=StepChambolleTV,

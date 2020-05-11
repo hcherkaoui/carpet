@@ -18,16 +18,15 @@ def _soft_th_tensor(z, lbda, step_size):
 def pseudo_soft_th_numpy(z, lbda, step_size):
     """ Pseudo Soft-thresholding for numpy array. """
     assert z.ndim == 2
-    z0_ = np.atleast_2d(z[:, 0])
     z_ = np.atleast_2d(_soft_th_numpy(z[:, 1:], lbda, step_size))
-    if z0_.shape[0] != z_.shape[0]:
-        z0_ = z0_.T
+    z0_ = np.atleast_2d(z[:, 0])
+    z0_ = z0_.T if z0_.shape[0] != z_.shape[0] else z0_
     return np.concatenate((z0_, z_), axis=1)
 
 
 def pseudo_soft_th_tensor(z, lbda, step_size):
     """ Soft-thresholding for Torch tensor. """
     assert z.ndim == 2
-    z0_ = z[:, 0][:, None]
     z_ = _soft_th_tensor(z[:, 1:], lbda, step_size)
+    z0_ = z[:, 0][:, None]
     return torch.cat([z0_, z_], dim=1)
