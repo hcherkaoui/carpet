@@ -173,8 +173,7 @@ class ListaBase(torch.nn.Module):
     def _fit_all_network_batch_gradient_descent(self, x, lbda):
         """ Fit the parameters of the network. """
         if self.net_solver_type == 'one_shot':
-            params = [p for layer_parameters in self.layers_parameters
-                      for p in layer_parameters.values()]
+            params = list(self.paramaters())
             self._fit_sub_net_batch_gd(x, lbda, params, self.n_layers,
                                        self.max_iter)
 

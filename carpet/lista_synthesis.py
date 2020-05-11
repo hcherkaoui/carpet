@@ -151,7 +151,12 @@ class CoupledIstaLASSO(ListaBase):
         # initialized variables
         n_atoms = self.A.shape[0]
         D = (np.eye(n_atoms, k=-1) - np.eye(n_atoms, k=0))[:, :-1]
+<<<<<<< HEAD
         _, _, z = init_vuz(self.A, D, x, lbda)
+=======
+        _, _, z0 = init_vuz(self.A, D, np.array(x), float(lbda))
+        z = check_tensor(z0, device=self.device)
+>>>>>>> ENH improve check_tensor
 
         for layer_params in self.layers_parameters[:output_layer]:
             # retrieve parameters
