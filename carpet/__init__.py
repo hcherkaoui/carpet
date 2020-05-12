@@ -5,22 +5,25 @@
 from .lista_synthesis import ListaLASSO, CoupledIstaLASSO, StepIstaLASSO
 from .lista_analysis import (StepSubGradTV, ListaTV, OrigChambolleTV,
                              CoupledChambolleTV, StepChambolleTV,
-                             CoupledCondatVu, StepCondatVu)
+                             CoupledCondatVu, StepCondatVu,
+                             LpgdTautString)
 
 __version__ = '0.1.dev0'
 
 
-_ALL_ALGO_ = dict(origista=ListaLASSO,
-                  coupledista=CoupledIstaLASSO,
-                  stepista=StepIstaLASSO,
-                  stepsubgradient=StepSubGradTV,
-                  origtv=ListaTV,
-                  origchambolle=OrigChambolleTV,
-                  coupledchambolle=CoupledChambolleTV,
-                  stepchambolle=StepChambolleTV,
-                  coupledcondatvu=CoupledCondatVu,
-                  stepcondatvu=StepCondatVu,
-                  )
+_ALL_ALGO_ = dict(
+    origista=ListaLASSO,
+    coupledista=CoupledIstaLASSO,
+    stepista=StepIstaLASSO,
+    stepsubgradient=StepSubGradTV,
+    origtv=ListaTV,
+    origchambolle=OrigChambolleTV,
+    coupledchambolle=CoupledChambolleTV,
+    stepchambolle=StepChambolleTV,
+    coupledcondatvu=CoupledCondatVu,
+    stepcondatvu=StepCondatVu,
+    lpgd_taut_string=LpgdTautString
+)
 
 
 def LearnTVAlgo(**kwargs):
@@ -30,4 +33,4 @@ def LearnTVAlgo(**kwargs):
 
 __all__ = [
     'LearnTVAlgo',
-            ]
+]

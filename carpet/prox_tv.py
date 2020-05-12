@@ -6,21 +6,21 @@ from .checks import check_tensor
 from .lista_synthesis import CoupledIstaLASSO
 
 
-class _ProxTV_l1(torch.autograd.Function):
+class ProxTV_l1(torch.autograd.Function):
     """
     Custom autograd Function wrapper for the prox_tv.
     """
 
     @staticmethod
-    def forward(ctx, z, mu):
+    def forward(ctx, x, lbda):
         # Convert input to numpy array to use the prox_tv library
-        device = z.device
-        z = z.data
-        mu = mu.data
+        device = x.device
+        x = x.data
+        lbda = lbda.data
 
         # Get back a tensor for the output and save it for the backward pass
         output = check_tensor(
-            np.array([prox_tv.tv1_1d(zz, mu) for zz in z]),
+            np.array([prox_tv.tv1_1d(xx, lbda) for xx in x]),
             device=device, requires_grad=True
         )
         mask_U = output - torch.functional.F.pad(output, (1, 0))[..., :-1]
@@ -40,17 +40,17 @@ class _ProxTV_l1(torch.autograd.Function):
         L = torch.triu(torch.ones((n_dim, n_dim), dtype=torch.float64))
 
         # import ipdb; ipdb.set_trace()
-        grad_z, grad_mu = [], []
+        grad_x, grad_lbda = [], []
         for i in range(batch_size):
             L_S = L[:, S[i]]                    # n_dim x |S|
             grad_u = grad_output[i].matmul(L_S)  # 1 x |S|
 
             H_S = torch.inverse(L_S.t().matmul(L_S))
-            grad_z.append(grad_u.matmul(H_S.matmul(L_S.t())))
-            grad_mu.append(grad_u.matmul(H_S.matmul(sign_u[i][S[i]])))
-        grad_z = torch.stack(grad_z)
-        grad_mu = torch.stack(grad_mu)
-        return (grad_z, grad_mu)
+            grad_x.append(grad_u.matmul(H_S.matmul(L_S.t())))
+            grad_lbda.append(grad_u.matmul(H_S.matmul(sign_u[i][S[i]])))
+        grad_x = torch.stack(grad_x)
+        grad_lbda = torch.stack(grad_lbda)
+        return (grad_x, grad_lbda)
 
 
 class ProxTV(torch.nn.Module):
@@ -73,11 +73,11 @@ class ProxTV(torch.nn.Module):
             self.lista = CoupledIstaLASSO(
                 A=np.eye(n_dim), n_layers=n_layers, device=device)
 
-    def forward(self, z, mu):
+    def forward(self, x, lbda):
         if self.prox == 'prox_tv':
-            return _ProxTV_l1.apply(z, mu)
+            return ProxTV_l1.apply(x, lbda)
 
-        output = self.lista(z, mu)
+        output = self.lista(x, lbda)
         return torch.cumsum(output, dim=1)
 
 

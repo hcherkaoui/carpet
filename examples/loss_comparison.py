@@ -11,7 +11,8 @@ from joblib import Memory
 from carpet.datasets import synthetic_1d_dataset
 from carpet.checks import check_random_state
 from utils import (lasso_like_tv, learned_lasso_like_tv, analysis_tv,
-                   chambolle_tv, learned_chambolle_tv, condatvu_tv)
+                   chambolle_tv, learned_chambolle_tv, condatvu_tv,
+                   learned_analysis_taut_string)
 
 
 def logspace_layers(n_layers=10, max_depth=50):
@@ -61,18 +62,32 @@ if __name__ == '__main__':
     ###########################################################################
     # Main experiment
     methods = [
-        # ('TV LISTA-Original', learned_lasso_like_tv, 'origista', 'tab:orange', '*', 'solid'),
-        # ('TV LISTA-Coupled', learned_lasso_like_tv, 'coupledista', 'tab:orange', '^', 'solid'),
-        # ('TV LISTA-Step', learned_lasso_like_tv, 'stepista', 'tab:orange', 'o', 'solid'),
-        # ('TV Condat-Vu-Coupled', learned_chambolle_tv, 'coupledcondatvu', 'tab:green', '^', 'solid'),
-        ('TV TV-Original', learned_chambolle_tv, 'origtv', 'tab:red', '*', 'solid'),
-        # ('TV Chamb-Original', learned_chambolle_tv, 'origchambolle', 'tab:blue', '*', 'solid'),
-        # ('TV Chamb-Coupled', learned_chambolle_tv, 'coupledchambolle', 'tab:blue', '^', 'solid'),
-        # ('TV synthesis FISTA-iterative', lasso_like_tv, 'fista', 'tab:orange', 's', 'dashed'),
-        # ('TV Condat-Vu-iterative', condatvu_tv, None, 'tab:green', 's', 'dashed'),
-        # ('TV Fast-Chamb-iterative', chambolle_tv, 'fast-chambolle', 'tab:blue', 's', 'dashed'),
-        ('TV analysis ISTA-iterative', analysis_tv, 'ista', 'tab:red', 's', 'dashed'),
-        ('TV analysis FISTA-iterative', analysis_tv, 'fista', 'tab:red', 's', 'dashed'),
+        # ('TV LISTA-Original', learned_lasso_like_tv, 'origista',
+        #  'tab:orange', '*', 'solid'),
+        # ('TV LISTA-Coupled', learned_lasso_like_tv, 'coupledista',
+        #  'tab:orange', '^', 'solid'),
+        # ('TV LISTA-Step', learned_lasso_like_tv, 'stepista',
+        #  'tab:orange', 'o', 'solid'),
+        # ('TV Condat-Vu-Coupled', learned_chambolle_tv, 'coupledcondatvu',
+        #  'tab:green', '^', 'solid'),
+        ('Analysis learned taut-string', learned_analysis_taut_string, None,
+         'tab:red', '*', '-.'),
+        ('TV TV-Original', learned_chambolle_tv, 'origtv',
+         'tab:red', '*', 'solid'),
+        # ('TV Chamb-Original', learned_chambolle_tv, 'origchambolle',
+        #  'tab:blue', '*', 'solid'),
+        # ('TV Chamb-Coupled', learned_chambolle_tv, 'coupledchambolle',
+        #  'tab:blue', '^', 'solid'),
+        # ('TV synthesis FISTA-iterative', lasso_like_tv, 'fista',
+        #  'tab:orange', 's', 'dashed'),
+        # ('TV Condat-Vu-iterative', condatvu_tv, None,
+        #  'tab:green', 's', 'dashed'),
+        # ('TV Fast-Chamb-iterative', chambolle_tv, 'fast-chambolle',
+        #  'tab:blue', 's', 'dashed'),
+        ('TV analysis ISTA-iterative', analysis_tv, 'ista',
+         'tab:red', 's', 'dashed'),
+        ('TV analysis FISTA-iterative', analysis_tv, 'fista',
+         'tab:red', 's', 'dashed'),
     ]
 
     def _run_experiment(methods, x_train, x_test, L, lbda, all_n_layers):

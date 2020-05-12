@@ -9,6 +9,7 @@ from .lista_synthesis import ListaLASSO
 from .checks import check_tensor
 from .proximity import pseudo_soft_th_tensor
 from .utils import init_vuz, v_to_u
+from .prox_tv import ProxTV_l1
 
 
 class _ListaAnalysis(ListaBase):
@@ -489,3 +490,57 @@ class StepCondatVu(_ListaAnalysis):
         return u
 
 
+class LpgdTautString(_ListaAnalysis):
+    __doc__ = DOC_LISTA.format(
+        type='learned-PGD with taut-string for prox operator',
+        problem_name='TV',
+        descr='unconstrained parametrization'
+    )
+
+    def __init__(self, A, n_layers, learn_th=False, max_iter=100,
+                 net_solver_type="one_shot", initial_parameters=None,
+                 name="LPGD analysis", verbose=0, device=None):
+
+        n_atoms = A.shape[0]
+        self.A = np.array(A)
+        self.I_k = np.eye(n_atoms)
+        self.D = (np.eye(n_atoms, k=-1) - np.eye(n_atoms, k=0))[:, :-1]
+
+        self.A_ = check_tensor(self.A, device=device)
+        self.l_ = np.linalg.norm(self.A, ord=2) ** 2
+
+        super().__init__(n_layers=n_layers, learn_th=learn_th,
+                         max_iter=max_iter, net_solver_type=net_solver_type,
+                         initial_parameters=initial_parameters, name=name,
+                         verbose=verbose, device=device)
+
+    def get_layer_parameters(self, layer):
+        layer_params = dict()
+        layer_params['Wu'] = self.I_k - self.A.dot(self.A.T) / self.l_
+        layer_params['Wx'] = self.A.T / self.l_
+        if self.learn_th:
+            layer_params['threshold'] = np.array(1.0 / self.l_)
+        return layer_params
+
+    def forward(self, x, lbda, output_layer=None):
+        """ Forward pass of the network. """
+        # check inputs
+        x, output_layer = self._check_forward_inputs(
+            x, output_layer, enable_none=True
+        )
+
+        # initialized variables
+        _, u, _ = init_vuz(self.A, self.D, x, lbda, device=self.device)
+
+        for layer_params in self.layers_parameters[:output_layer]:
+            # retrieve parameters
+            mul_lbda = layer_params.get('threshold', 1.0 / self.l_)
+            mul_lbda = check_tensor(float(mul_lbda))
+            Wx = layer_params['Wx']
+            Wu = layer_params['Wu']
+
+            # apply one 'iteration'
+            u = u.matmul(Wu) + x.matmul(Wx)
+            u = ProxTV_l1.apply(u, lbda*mul_lbda)
+
+        return u
