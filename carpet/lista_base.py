@@ -43,7 +43,7 @@ class ListaBase(torch.nn.Module):
                                descr='')
 
     def __init__(self, n_layers, learn_th=True, max_iter=100,
-                 net_solver_type='recursive', initial_parameters=[],
+                 net_solver_type='one_shot', initial_parameters=None,
                  name="LISTA", verbose=0, device=None):
         # general parameters
         self.name = name
@@ -64,6 +64,21 @@ class ListaBase(torch.nn.Module):
 
         # inti network
         self._init_network_parameters(initial_parameters=initial_parameters)
+
+    def _init_network_parameters(self, initial_parameters=None):
+        """ Initialize the parameters of the network. """
+        if initial_parameters is None:
+            initial_parameters = []
+
+        self.layers_parameters = []
+        for layer in range(self.n_layers):
+            if len(initial_parameters) > layer:
+                layer_params = initial_parameters[layer]
+            else:
+                layer_params = self.get_layer_parameters(layer)
+
+            layer_params = self._tensorized_parameters(layer, layer_params)
+            self.layers_parameters += [layer_params]
 
     def export_parameters(self):
         """ Return a list with all the parameters of the network.
@@ -165,15 +180,15 @@ class ListaBase(torch.nn.Module):
         raise NotImplementedError('ListaBase is a virtual class and should '
                                   'not be instanciate')
 
-    def _init_network_parameters(self, initial_parameters=[]):
-        """ Initialize the parameters of the network. """
+    def get_layer_parameters(self, layer):
+        """ Initialize the parameters of one layer of the network. """
         raise NotImplementedError('ListaBase is a virtual class and should '
-                                  'not be instanciate')
+                                  'not be instanciated')
 
     def _fit_all_network_batch_gradient_descent(self, x, lbda):
         """ Fit the parameters of the network. """
         if self.net_solver_type == 'one_shot':
-            params = list(self.paramaters())
+            params = list(self.parameters())
             self._fit_sub_net_batch_gd(x, lbda, params, self.n_layers,
                                        self.max_iter)
 
@@ -236,6 +251,8 @@ class ListaBase(torch.nn.Module):
                       f"Fitting, step_size={lr:.2e}, "
                       f"iter={i}/{max_iter}, "
                       f"loss={self.training_loss_[-1]:.3e}")
+            else:
+                print(f"\rTraining... {i/max_iter:7.2%}", end='', flush=True)
 
             # Gradient computation
             self._update_gradient(x, lbda, n_layer)
@@ -325,15 +342,11 @@ class ListaBase(torch.nn.Module):
                              f"(n_layers={self.n_layers})")
         return x, output_layer
 
-    def _tensorized_and_hooked_parameters(self, layer, layer_params,
-                                          parameters_config):
-        """ Transform all the parameters to learnable Tensor and store
-        parameters hooks and register them."""
+    def _tensorized_parameters(self, layer, layer_params):
+        """ Transform all the parameters to learnable Tensor"""
         layer_params = {
             k: torch.nn.Parameter(check_tensor(p, device=self.device))
             for k, p in layer_params.items()}
         for name, p in layer_params.items():
             self.register_parameter("layer{}-{}".format(layer, name), p)
-            for h in parameters_config[name]:
-                self.pre_gradient_hooks[h].append(p)
         return layer_params
