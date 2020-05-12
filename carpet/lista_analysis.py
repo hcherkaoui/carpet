@@ -57,7 +57,7 @@ class StepSubGradTV(_ListaAnalysis):
                                )
 
     def __init__(self, A, n_layers, learn_th=True, max_iter=100,
-                 net_solver_type="one_shot", initial_parameters=[],
+                 net_solver_type="recursive", initial_parameters=[],
                  name="learned-TV Sub Gradient", verbose=0, device=None):
 
         n_atoms = A.shape[0]
@@ -110,7 +110,7 @@ class ListaTV(_ListaAnalysis):
     )
 
     def __init__(self, A, n_layers, learn_th=True, max_iter=100,
-                 net_solver_type="one_shot", initial_parameters=[],
+                 net_solver_type="recursive", initial_parameters=[],
                  name="LISTA", verbose=0, device=None):
 
         n_atoms = A.shape[0]
@@ -168,7 +168,7 @@ class OrigChambolleTV(_ListaAnalysisDual):
     )
 
     def __init__(self, A, n_layers, learn_th=True, max_iter=100,
-                 net_solver_type="one_shot", initial_parameters=[],
+                 net_solver_type="recursive", initial_parameters=[],
                  name="learned-TV Chambolle original", verbose=0, device=None):
 
         n_atoms = A.shape[0]
@@ -232,7 +232,7 @@ class CoupledChambolleTV(_ListaAnalysisDual):
     )
 
     def __init__(self, A, n_layers, learn_th=True,  max_iter=100,
-                 net_solver_type="one_shot", initial_parameters=[],
+                 net_solver_type="recursive", initial_parameters=[],
                  name="learned-TV Chambolle-Coupled", verbose=0, device=None):
 
         n_atoms = A.shape[0]
@@ -293,7 +293,7 @@ class StepChambolleTV(_ListaAnalysisDual):
     )
 
     def __init__(self, A, n_layers, learn_th=True, max_iter=100,
-                 net_solver_type="one_shot", initial_parameters=[],
+                 net_solver_type="recursive", initial_parameters=[],
                  name="learned-TV Chambolle-Step", verbose=0, device=None):
 
         n_atoms = A.shape[0]
@@ -353,7 +353,7 @@ class CoupledCondatVu(_ListaAnalysis):
     )
 
     def __init__(self, A, n_layers, learn_th=True, max_iter=100,
-                 net_solver_type="one_shot", initial_parameters=[],
+                 net_solver_type="recursive", initial_parameters=[],
                  name="learned-Condat-Vu-coupled", verbose=0, device=None):
 
         n_atoms = A.shape[0]
@@ -427,7 +427,7 @@ class StepCondatVu(_ListaAnalysis):
     )
 
     def __init__(self, A, n_layers, learn_th=False, max_iter=100,
-                 net_solver_type="one_shot", initial_parameters=[],
+                 net_solver_type="recursive", initial_parameters=[],
                  name="learned-Condat-Vu-step", verbose=0, device=None):
 
         n_atoms = A.shape[0]
@@ -498,7 +498,7 @@ class LpgdTautString(_ListaAnalysis):
     )
 
     def __init__(self, A, n_layers, learn_th=False, max_iter=100,
-                 net_solver_type="one_shot", initial_parameters=None,
+                 net_solver_type="recursive", initial_parameters=None,
                  name="LPGD analysis", verbose=0, device=None):
 
         n_atoms = A.shape[0]

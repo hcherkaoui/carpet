@@ -158,7 +158,7 @@ class StepIstaLASSO(_ListaSynthesis):
     )
 
     def __init__(self, A, n_layers, learn_th=False, max_iter=100,
-                 net_solver_type='one_shot', initial_parameters=[],
+                 net_solver_type='recursive', initial_parameters=[],
                  name="Step-LISTA", verbose=0, device=None):
 
         n_atoms = A.shape[0]
