@@ -23,7 +23,7 @@ def test_untrained_synthesis_lista(lbda, parametrization, n):
 
     n_layers = 10
     LA = L.dot(A)
-    step_size = 1.0 / np.linalg.norm(LA.dot(LA.T), ord=2)
+    step_size = 1.0 / np.linalg.norm(LA, ord=2) ** 2
 
     lista = LearnTVAlgo(algo_type=parametrization, A=A, n_layers=n_layers,
                         device='cpu')

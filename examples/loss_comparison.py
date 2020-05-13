@@ -10,8 +10,9 @@ import numpy as np
 from carpet.datasets import synthetic_1d_dataset
 from carpet.checks import check_random_state
 from utils import (synthesis_learned_algo, analysis_learned_algo,
-                   synthesis_iter_algo, analysis_primal_iter_algo,
-                   analysis_dual_iter_algo, analysis_primal_dual_iter_algo)
+                   analysis_learned_taut_string, synthesis_iter_algo,
+                   analysis_primal_iter_algo, analysis_dual_iter_algo,
+                   analysis_primal_dual_iter_algo)
 
 
 def logspace_layers(n_layers=10, max_depth=50):
@@ -36,13 +37,13 @@ if __name__ == '__main__':
     # Define variables and data
 
     # Define variables
-    n_samples = 2000
-    n_samples_testing = 1000
-    n_atoms = 10
+    n_samples = 200
+    n_samples_testing = 100
+    n_atoms = 8
     n_dim = 5
     s = 0.2
     snr = 0.0
-    all_n_layers = logspace_layers(n_layers=10, max_depth=50)
+    all_n_layers = logspace_layers(n_layers=10, max_depth=40)
     ticks_layers = np.array([0] + all_n_layers)
     lbda = 1.0
 
@@ -60,19 +61,20 @@ if __name__ == '__main__':
 
     ###########################################################################
     # Main experiment
-    methods = [
-        ('LISTA-Original', synthesis_learned_algo, 'origista', 'tab:orange', '*', 'solid'),
-        # ('LISTA-Coupled', synthesis_learned_algo, 'coupledista', 'tab:orange', '^', 'solid'),
-        ('LISTA-Step', synthesis_learned_algo, 'stepista', 'tab:orange', 'o', 'solid'),
-        # ('Condat-Vu-Coupled', analysis_learned_algo, 'coupledcondatvu', 'tab:green', '^', 'solid'),
-        ('TV-Original', analysis_learned_algo, 'origtv', 'tab:red', '*', 'solid'),
-        # ('Chamb-Original', analysis_learned_algo, 'origchambolle', 'tab:blue', '*', 'solid'),
-        # ('Chamb-Coupled', analysis_learned_algo, 'coupledchambolle', 'tab:blue', '^', 'solid'),
+    methods = [  # can be commented in one #
+        ('Synthesis LISTA-Original', synthesis_learned_algo, 'origista', 'tab:orange', '*', 'solid'),
+        # ('Synthesis LISTA-Coupled', synthesis_learned_algo, 'coupledista', 'tab:orange', '^', 'solid'),
+        ('Synthesis LISTA-Step', synthesis_learned_algo, 'stepista', 'tab:orange', 'o', 'solid'),
+        # ('Analysis Condat-Vu-Coupled', analysis_learned_algo, 'coupledcondatvu', 'tab:green', '^', 'solid'),
+        ('Analysis learned taut-string', analysis_learned_taut_string, None, 'tab:red', '*', '-.'),
+        ('Analysis TV-Original', analysis_learned_algo, 'origtv', 'tab:red', '*', 'solid'),
+        # ('Analysis Chamb-Original', analysis_learned_algo, 'origchambolle', 'tab:blue', '*', 'solid'),
+        # ('Analysis Chamb-Coupled', analysis_learned_algo, 'coupledchambolle', 'tab:blue', '^', 'solid'),
         ('Synthesis FISTA-iterative', synthesis_iter_algo, 'ista', 'tab:orange', 's', 'dashed'),
         ('Synthesis FISTA-iterative', synthesis_iter_algo, 'fista', 'tab:orange', 's', 'dashed'),
-        # ('Condat-Vu-iterative', analysis_primal_dual_iter_algo, None, 'tab:green', 's', 'dashed'),
-        # ('Chamb-iterative', analysis_dual_iter_algo, 'chambolle', 'tab:blue', 's', 'dashed'),
-        # ('Fast-Chamb-iterative', analysis_dual_iter_algo, 'fast-chambolle', 'tab:blue', 's', 'dashed'),
+        # ('Analysis Condat-Vu-iterative', analysis_primal_dual_iter_algo,None, 'tab:green', 's', 'dashed'),
+        # ('Analysis Chamb-iterative', analysis_dual_iter_algo, 'chambolle', 'tab:blue', 's', 'dashed'),
+        # ('Analysis  Fast-Chamb-iterative', analysis_dual_iter_algo, 'fast-chambolle', 'tab:blue', 's', 'dashed'),
         ('Analysis ISTA-iterative', analysis_primal_iter_algo, 'ista', 'tab:red', 's', 'dashed'),
         ('Analysis FISTA-iterative', analysis_primal_iter_algo, 'fista', 'tab:red', 's', 'dashed'),
     ]

@@ -4,6 +4,7 @@
 
 import time
 import numpy as np
+import pandas as pd
 from joblib import Memory
 from prox_tv import tv1_1d
 from carpet import LearnTVAlgo
@@ -139,7 +140,7 @@ def synthesis_iter_algo(x_train, x_test, A, D, L, lbda, all_n_layers, type_,
     name = 'ISTA' if type_ == 'chambolle' else 'FISTA'
     max_iter = all_n_layers[-1]
     LA = L.dot(A)
-    step_size = 1.0 / np.linalg.norm(LA.T.dot(LA), ord=2)
+    step_size = 1.0 / np.linalg.norm(LA, ord=2) ** 2
 
     _, _, z0_test = init_vuz(A, D, x_test, lbda)
     _, _, z0_train = init_vuz(A, D, x_train, lbda)
@@ -193,7 +194,7 @@ def analysis_primal_iter_algo(x_train, x_test, A, D, L, lbda, all_n_layers,
     """ Iterative-algo solver for synthesis TV problem. """
     name = 'ISTA' if type_ == 'ista' else 'FISTA'
     max_iter = all_n_layers[-1]
-    step_size = 1.0 / np.linalg.norm(A.T.dot(A), ord=2)
+    step_size = 1.0 / np.linalg.norm(A, ord=2) ** 2
 
     _, u0_test, _ = init_vuz(A, D, x_test, lbda)
     _, u0_train, _ = init_vuz(A, D, x_train, lbda)
@@ -263,7 +264,7 @@ def analysis_dual_iter_algo(x_train, x_test, A, D, L, lbda, all_n_layers,
     v0_train, _, _ = init_vuz(A, D, x_train, lbda)
 
     max_iter = all_n_layers[-1]
-    step_size = 1.0 / np.linalg.norm((Psi_A.T).dot(Psi_A), ord=2)
+    step_size = 1.0 / np.linalg.norm(Psi_A.T, ord=2) ** 2
     momentum = None if type_ == 'chambolle' else 'fista'
     name = 'ISTA' if type_ == 'chambolle' else 'FISTA'
 
@@ -311,8 +312,8 @@ def analysis_primal_dual_iter_algo(x_train, x_test, A, D, L, lbda,
     max_iter = all_n_layers[-1]
     rho = 1.0
     sigma = 0.5
-    L_D = np.linalg.norm(D.dot(D.T), ord=2)
-    L_A = np.linalg.norm(A.dot(A.T), ord=2)
+    L_A = np.linalg.norm(A, ord=2) ** 2
+    L_D = np.linalg.norm(D, ord=2) ** 2
     tau = 1.0 / (L_A / 2.0 + sigma * L_D**2)
 
     v0_test, u0_test, _ = init_vuz(A, D, x_test, lbda, force_numpy=True)
@@ -364,3 +365,55 @@ def analysis_primal_dual_iter_algo(x_train, x_test, A, D, L, lbda,
               f"train-loss={train_loss[-1]:.8e} test-loss={test_loss[-1]:.8e}")
 
     return train_loss, test_loss, train_reg, test_reg
+
+
+def analysis_learned_taut_string(x_train, x_test, A, D, L, lbda, all_n_layers,
+                                 type_=None, verbose=1):
+    """ NN-algo solver for analysis TV problem. """
+    params = None
+
+    # helper to record train/test loss
+    log = []
+
+    def record_loss(u_train, u_test):
+        log.append(dict(
+            train_loss=analysis_primal_obj(u_train, A, D, x_train, lbda),
+            test_loss=analysis_primal_obj(u_test, A, D, x_test, lbda),
+            train_reg=tv_reg(u_train, D),
+            test_reg=tv_reg(u_test, D)
+        ))
+
+    _, u0_train, _ = init_vuz(A, D, x_train, lbda)
+    _, u0_test, _ = init_vuz(A, D, x_test, lbda)
+    record_loss(u0_train, u0_test)
+
+    for n_layers in all_n_layers:
+
+        # Declare network for the given number of layers. Warm-init the first
+        # layers with parameters learned with previous networks if any.
+        algo = LearnTVAlgo(algo_type='lpgd_taut_string', A=A,
+                           n_layers=n_layers, max_iter=500, device='cpu',
+                           initial_parameters=params, verbose=0)
+
+        # train
+        t0_ = time.time()
+        algo.fit(x_train, lbda=lbda)
+        delta_ = time.time() - t0_
+
+        # save parameters
+        params = algo.export_parameters()
+
+        # get train and test error
+        u_train = algo.transform(x_train, lbda, output_layer=n_layers)
+        u_test = algo.transform(x_test, lbda, output_layer=n_layers)
+        record_loss(u_train, u_test)
+
+        if verbose > 0:
+            print(f"[{algo.name}|layers#{n_layers:3d}] model fitted "
+                  f"{delta_:4.1f}s")
+
+    df = pd.DataFrame(log)
+    to_return = (df['train_loss'].values, df['test_loss'].values,
+                 df['train_reg'].values, df['test_reg'].values)
+
+    return to_return

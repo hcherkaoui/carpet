@@ -17,7 +17,7 @@ DOC_LISTA = """ {type} network for the {problem_name} problem
         Dictionary for the considered sparse coding problem.
     D : ndarray, shape (n_dim, n_dim-1)
         Integration or differentiation operator
-    n_layer : int
+    n_layers : int
         Number of layers in the network.
     learn_th : bool (default: True)
         Wether to learn the thresholds or not.
@@ -43,7 +43,7 @@ class ListaBase(torch.nn.Module):
                                descr='')
 
     def __init__(self, n_layers, learn_th=True, max_iter=100,
-                 net_solver_type='recursive', initial_parameters=[],
+                 net_solver_type='one_shot', initial_parameters=None,
                  name="LISTA", verbose=0, device=None):
         # general parameters
         self.name = name
@@ -64,6 +64,21 @@ class ListaBase(torch.nn.Module):
 
         # inti network
         self._init_network_parameters(initial_parameters=initial_parameters)
+
+    def _init_network_parameters(self, initial_parameters=None):
+        """ Initialize the parameters of the network. """
+        if initial_parameters is None:
+            initial_parameters = []
+
+        self.layers_parameters = []
+        for layer in range(self.n_layers):
+            if len(initial_parameters) > layer:
+                layer_params = initial_parameters[layer]
+            else:
+                layer_params = self.get_layer_parameters(layer)
+
+            layer_params = self._tensorized_parameters(layer, layer_params)
+            self.layers_parameters += [layer_params]
 
     def export_parameters(self):
         """ Return a list with all the parameters of the network.
@@ -165,16 +180,15 @@ class ListaBase(torch.nn.Module):
         raise NotImplementedError('ListaBase is a virtual class and should '
                                   'not be instanciate')
 
-    def _init_network_parameters(self, initial_parameters=[]):
-        """ Initialize the parameters of the network. """
+    def get_layer_parameters(self, layer):
+        """ Initialize the parameters of one layer of the network. """
         raise NotImplementedError('ListaBase is a virtual class and should '
-                                  'not be instanciate')
+                                  'not be instanciated')
 
     def _fit_all_network_batch_gradient_descent(self, x, lbda):
         """ Fit the parameters of the network. """
         if self.net_solver_type == 'one_shot':
-            params = [p for layer_parameters in self.layers_parameters
-                      for p in layer_parameters.values()]
+            params = list(self.parameters())
             self._fit_sub_net_batch_gd(x, lbda, params, self.n_layers,
                                        self.max_iter)
 
@@ -182,19 +196,19 @@ class ListaBase(torch.nn.Module):
             layers = range(1, self.n_layers + 1)
             max_iters = np.diff(np.linspace(0, self.max_iter, self.n_layers+1,
                                             dtype=int))
-            for n_layer, max_iter in zip(layers, max_iters):
+            for id_layer, max_iter in zip(layers, max_iters):
                 params = [p for lp in self.layers_parameters
                           for p in lp.values()]
-                self._fit_sub_net_batch_gd(x, lbda, params, n_layer, max_iter)
+                self._fit_sub_net_batch_gd(x, lbda, params, id_layer, max_iter)
 
         elif self.net_solver_type == 'greedy':
             layers = range(1, self.n_layers + 1)
             max_iters = np.diff(np.linspace(0, self.max_iter, self.n_layers+1,
                                             dtype=int))
-            for n_layer, max_iter in zip(layers, max_iters):
-                params = [p for lp in self.layers_parameters[:n_layer]
+            for id_layer, max_iter in zip(layers, max_iters):
+                params = [p for lp in self.layers_parameters[:id_layer]
                           for p in lp.values()]
-                self._fit_sub_net_batch_gd(x, lbda, params, n_layer, max_iter)
+                self._fit_sub_net_batch_gd(x, lbda, params, id_layer, max_iter)
 
         else:
             raise ValueError(f"net_solver_type should belong to "
@@ -207,11 +221,11 @@ class ListaBase(torch.nn.Module):
 
         return self
 
-    def _fit_sub_net_batch_gd(self, x, lbda, params, n_layer, max_iter,
+    def _fit_sub_net_batch_gd(self, x, lbda, params, id_layer, max_iter,
                               max_iter_line_search=10, eps=1.0e-20):
         """ Fit the parameters of the sub-network. """
         with torch.no_grad():
-            z = self(x, lbda, output_layer=n_layer)
+            z = self(x, lbda, output_layer=id_layer)
             self.training_loss_ = [float(self._loss_fn(x, lbda, z))]
         self.norm_grad_ = []
 
@@ -222,7 +236,7 @@ class ListaBase(torch.nn.Module):
         i = 0
 
         if self.verbose > 1:
-            print(f"\r[{self.name} - layer{n_layer}] "  # noqa: E999
+            print(f"\r[{self.name} - layer{id_layer}] "  # noqa: E999
                   f"Fitting, step_size={lr:.2e}, "
                   f"iter={i}/{max_iter}, "
                   f"loss={self.training_loss_[-1]:.3e}")
@@ -233,13 +247,16 @@ class ListaBase(torch.nn.Module):
 
             # Verbosity
             if self.verbose > 1 and i % verbose_rate == 0:
-                print(f"\r[{self.name} - layer{n_layer}] "  # noqa: E999
+                print(f"\r[{self.name} - layer{id_layer}] "  # noqa: E999
                       f"Fitting, step_size={lr:.2e}, "
                       f"iter={i}/{max_iter}, "
                       f"loss={self.training_loss_[-1]:.3e}")
+            else:
+                p = (id_layer - 1 + i/max_iter) / self.n_layers
+                print(f"\rTraining... {p:7.2%}", end='', flush=True)
 
             # Gradient computation
-            self._update_gradient(x, lbda, n_layer)
+            self._update_gradient(x, lbda, id_layer)
 
             # Back-tracking line search descent step
             for _ in range(max_iter_line_search):
@@ -249,7 +266,7 @@ class ListaBase(torch.nn.Module):
 
                 # Compute new possible loss
                 with torch.no_grad():
-                    z = self(x, lbda, output_layer=n_layer)
+                    z = self(x, lbda, output_layer=id_layer)
                     loss_value = float(self._loss_fn(x, lbda, z))
 
                 # accepting the point
@@ -276,7 +293,7 @@ class ListaBase(torch.nn.Module):
 
         if self.verbose:
             converging_status = '' if is_converged else 'not '
-            print(f"\r[{self.name} - layer{n_layer}] Finished "
+            print(f"\r[{self.name} - layer{id_layer}] Finished "
                   f"({converging_status}converged), step_size={lr:.2e}, "
                   f"iter={i}/{max_iter}, "
                   f"final-loss={self.training_loss_[-1]:.6e}")
@@ -284,12 +301,12 @@ class ListaBase(torch.nn.Module):
         msg = "Loss function has increased during training!"
         assert np.all(np.diff(self.training_loss_) < 0.0), msg
 
-    def _update_gradient(self, x, lbda, n_layer):
+    def _update_gradient(self, x, lbda, id_layer):
         """ Gradient update. """
         # init gradient
         self.zero_grad()
         # init back-propagation
-        z = self(x, lbda, output_layer=n_layer)
+        z = self(x, lbda, output_layer=id_layer)
         loss = self._loss_fn(x, lbda, z)
         # Compute gradient
         loss.backward()
@@ -326,15 +343,11 @@ class ListaBase(torch.nn.Module):
                              f"(n_layers={self.n_layers})")
         return x, output_layer
 
-    def _tensorized_and_hooked_parameters(self, layer, layer_params,
-                                          parameters_config):
-        """ Transform all the parameters to learnable Tensor and store
-        parameters hooks and register them."""
+    def _tensorized_parameters(self, layer, layer_params):
+        """ Transform all the parameters to learnable Tensor"""
         layer_params = {
             k: torch.nn.Parameter(check_tensor(p, device=self.device))
             for k, p in layer_params.items()}
         for name, p in layer_params.items():
             self.register_parameter("layer{}-{}".format(layer, name), p)
-            for h in parameters_config[name]:
-                self.pre_gradient_hooks[h].append(p)
         return layer_params
