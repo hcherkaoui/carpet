@@ -159,7 +159,7 @@ class ListaTV(_ListaAnalysis):
 
             # apply one 'iteration'
             u = u.matmul(Wu) + x.matmul(Wx)
-            z = self.prox_tv(x=u, lbda=float(lbda*mul_lbda))
+            z = self.prox_tv(x=u, lbda=lbda * mul_lbda)
             u = torch.cumsum(z, dim=1)
 
         return u
@@ -550,6 +550,6 @@ class LpgdTautString(_ListaAnalysis):
 
             # apply one 'iteration'
             u = u.matmul(Wu) + x.matmul(Wx)
-            u = ProxTV_l1.apply(u, lbda*mul_lbda)
+            u = ProxTV_l1.apply(u, lbda * mul_lbda)
 
         return u
