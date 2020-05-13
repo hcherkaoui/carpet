@@ -1,5 +1,6 @@
 """ Utils module for examples. """
 # Authors: Hamza Cherkaoui <hamza.cherkaoui@inria.fr>
+# Authors: Thomas Moreau <thomas.moreau@inria.fr>
 # License: BSD (3-clause)
 
 import time

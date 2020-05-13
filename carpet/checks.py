@@ -1,5 +1,6 @@
 """ Utilities to generate a synthetic 1d data. """
 # Authors: Hamza Cherkaoui <hamza.cherkaoui@inria.fr>
+# Authors: Thomas Moreau <thomas.moreau@inria.fr>
 # License: BSD (3-clause)
 
 import numpy as np

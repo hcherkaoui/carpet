@@ -1,6 +1,7 @@
 """ Compare the convergence rate for the synthesis/analysis 1d TV-l1 problem.
 """
 # Authors: Hamza Cherkaoui <hamza.cherkaoui@inria.fr>
+# Authors: Thomas Moreau <thomas.moreau@inria.fr>
 # License: BSD (3-clause)
 
 import os
