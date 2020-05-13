@@ -128,9 +128,7 @@ class ListaTV(_ListaAnalysis):
                          verbose=verbose, device=device)
 
         self.prox_tv = ListaLASSO(A=self.I_k, n_layers=500, learn_th=True,
-                                  max_iter=300, net_solver_type="recursive",
-                                  initial_parameters=[], name="Prox-TV",
-                                  verbose=0, device=self.device)
+                                  name="Prox-TV-Lista", device=self.device)
 
     def get_layer_parameters(self, layer):
         layer_params = dict()

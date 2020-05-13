@@ -17,7 +17,7 @@ from utils import (synthesis_learned_algo, analysis_learned_algo,
 
 
 def logspace_layers(n_layers=10, max_depth=50):
-    """ Return n_layers, from 1 to max_depth of differents number of layers to
+    """ Return n_layers, from 1 to max_depth of different number of layers to
     define networks """
     all_n_layers = np.logspace(0, np.log10(max_depth), n_layers).astype(int)
     return list(np.unique(all_n_layers))
@@ -76,21 +76,36 @@ if __name__ == '__main__':
     ###########################################################################
     # Main experiment
     methods = [  # can be commented in one #
-        ('Synthesis LISTA-Original', synthesis_learned_algo, 'origista', 'tab:orange', '*', 'solid'),
-        # ('Synthesis LISTA-Coupled', synthesis_learned_algo, 'coupledista', 'tab:orange', '^', 'solid'),
-        # ('Synthesis LISTA-Step', synthesis_learned_algo, 'stepista', 'tab:orange', 'o', 'solid'),
-        # ('Analysis Condat-Vu-Coupled', analysis_learned_algo, 'coupledcondatvu', 'tab:green', '^', 'solid'),
-        ('Analysis learned taut-string', analysis_learned_taut_string, None, 'tab:red', '*', '-.'),
-        ('Analysis TV-Original', analysis_learned_algo, 'origtv', 'tab:red', '*', 'solid'),
-        # ('Analysis Chamb-Original', analysis_learned_algo, 'origchambolle', 'tab:blue', '*', 'solid'),
-        # ('Analysis Chamb-Coupled', analysis_learned_algo, 'coupledchambolle', 'tab:blue', '^', 'solid'),
-        ('Synthesis FISTA-iterative', synthesis_iter_algo, 'ista', 'tab:orange', 's', 'dashed'),
-        ('Synthesis FISTA-iterative', synthesis_iter_algo, 'fista', 'tab:orange', 's', 'dashed'),
-        # ('Analysis Condat-Vu-iterative', analysis_primal_dual_iter_algo,None, 'tab:green', 's', 'dashed'),
-        # ('Analysis Chamb-iterative', analysis_dual_iter_algo, 'chambolle', 'tab:blue', 's', 'dashed'),
-        # ('Analysis  Fast-Chamb-iterative', analysis_dual_iter_algo, 'fast-chambolle', 'tab:blue', 's', 'dashed'),
-        ('Analysis ISTA-iterative', analysis_primal_iter_algo, 'ista', 'tab:red', 's', 'dashed'),
-        ('Analysis FISTA-iterative', analysis_primal_iter_algo, 'fista', 'tab:red', 's', 'dashed'),
+        ('Synthesis LISTA-Original', synthesis_learned_algo, 'origista',
+         'tab:orange', '*', 'solid'),
+        # ('Synthesis LISTA-Coupled', synthesis_learned_algo, 'coupledista',
+        #  'tab:orange', '^', 'solid'),
+        # ('Synthesis LISTA-Step', synthesis_learned_algo, 'stepista',
+        #  'tab:orange', 'o', 'solid'),
+        # ('Analysis Condat-Vu-Coupled', analysis_learned_algo,
+        #  'coupledcondatvu', 'tab:green', '^', 'solid'),
+        ('Analysis learned taut-string', analysis_learned_taut_string, None,
+         'tab:red', '*', '-.'),
+        ('Analysis TV-Original', analysis_learned_algo, 'origtv',
+         'tab:red', '*', 'solid'),
+        # ('Analysis Chamb-Original', analysis_learned_algo, 'origchambolle',
+        #  'tab:blue', '*', 'solid'),
+        # ('Analysis Chamb-Coupled', analysis_learned_algo, 'coupledchambolle',
+        #  'tab:blue', '^', 'solid'),
+        ('Synthesis FISTA-iterative', synthesis_iter_algo, 'ista',
+         'tab:orange', 's', 'dashed'),
+        ('Synthesis FISTA-iterative', synthesis_iter_algo, 'fista',
+         'tab:orange', 's', 'dashed'),
+        # ('Analysis Condat-Vu-iterative', analysis_primal_dual_iter_algo,None,
+        #  'tab:green', 's', 'dashed'),
+        # ('Analysis Chamb-iterative', analysis_dual_iter_algo, 'chambolle',
+        #  'tab:blue', 's', 'dashed'),
+        # ('Analysis  Fast-Chamb-iterative', analysis_dual_iter_algo,
+        #  'fast-chambolle', 'tab:blue', 's', 'dashed'),
+        ('Analysis ISTA-iterative', analysis_primal_iter_algo, 'ista',
+         'tab:red', 's', 'dashed'),
+        ('Analysis FISTA-iterative', analysis_primal_iter_algo, 'fista',
+         'tab:red', 's', 'dashed'),
     ]
 
     def run_experiment(methods, x_train, x_test, L, lbda, all_n_layers):
