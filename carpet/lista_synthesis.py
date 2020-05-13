@@ -134,7 +134,7 @@ class CoupledIstaLASSO(_ListaSynthesis):
         # initialized variables
         n_atoms = self.A.shape[0]
         D = (np.eye(n_atoms, k=-1) - np.eye(n_atoms, k=0))[:, :-1]
-        _, _, z = init_vuz(self.A, D, x, lbda)
+        _, _, z = init_vuz(self.A, D, x, lbda, device=self.device)
 
         for layer_params in self.layers_parameters[:output_layer]:
             # retrieve parameters
@@ -194,7 +194,7 @@ class StepIstaLASSO(_ListaSynthesis):
         # initialized variables
         n_atoms = self.A.shape[0]
         D = (np.eye(n_atoms, k=-1) - np.eye(n_atoms, k=0))[:, :-1]
-        _, _, z = init_vuz(self.A, D, x, lbda)
+        _, _, z = init_vuz(self.A, D, x, lbda, device=self.device)
 
         for layer_params in self.layers_parameters[:output_layer]:
             # retrieve parameters

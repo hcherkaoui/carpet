@@ -35,7 +35,7 @@ class _ListaAnalysisDual(ListaBase):
     def transform(self, x, lbda, output_layer=None):
         with torch.no_grad():
             v = self(x, lbda, output_layer=output_layer).cpu().numpy()
-            return v_to_u(v, x, lbda, A=self.A, D=self.D)
+            return v_to_u(v, x, lbda, A=self.A, D=self.D, device=self.device)
 
     def _loss_fn(self, x, lbda, v):
         """ Target loss function. """
@@ -88,7 +88,7 @@ class StepSubGradTV(_ListaAnalysis):
         )
 
         # initialized variables
-        _, u, _ = init_vuz(self.A, self.D, x, lbda)
+        _, u, _ = init_vuz(self.A, self.D, x, lbda, device=self.device)
 
         for layer_params in self.layers_parameters[:output_layer]:
             # retrieve parameters
@@ -153,6 +153,7 @@ class ListaTV(_ListaAnalysis):
         for layer_params in self.layers_parameters[:output_layer]:
             # retrieve parameters
             mul_lbda = layer_params.get('threshold', 1.0 / self.l_)
+            mul_lbda = check_tensor(mul_lbda, device=self.device)
             Wx = layer_params['Wx']
             Wu = layer_params['Wu']
 
@@ -213,11 +214,12 @@ class OrigChambolleTV(_ListaAnalysisDual):
         )
 
         # initialized variables
-        v, _, _ = init_vuz(self.A, self.D, x, lbda)
+        v, _, _ = init_vuz(self.A, self.D, x, lbda, device=self.device)
 
         for layer_params in self.layers_parameters[:output_layer]:
             # retrieve parameters
-            mul_lbda = float(layer_params.get('threshold', 1.0))
+            mul_lbda = layer_params.get('threshold', 1.0)
+            mul_lbda = check_tensor(mul_lbda)
             Wx = layer_params['Wx']
             Wv = layer_params['Wv']
 
@@ -273,13 +275,14 @@ class CoupledChambolleTV(_ListaAnalysisDual):
         )
 
         # initialized variables
-        v, _, _ = init_vuz(self.A, self.D, x, lbda)
+        v, _, _ = init_vuz(self.A, self.D, x, lbda, device=self.device)
         v = check_tensor(v, device=self.device)
 
         for layer_params in self.layers_parameters[:output_layer]:
             # retrieve parameters
             W = layer_params['W_coupled']
-            mul_lbda = float(layer_params.get('threshold', 1.0))
+            mul_lbda = layer_params.get('threshold', 1.0)
+            mul_lbda = check_tensor(mul_lbda, device=self.device)
 
             # apply one 'dual iteration'
             residual = v.matmul(self.Psi_A_.t()) - x
@@ -333,12 +336,13 @@ class StepChambolleTV(_ListaAnalysisDual):
         )
 
         # initialized variables
-        v, _, _ = init_vuz(self.A, self.D, x, lbda)
+        v, _, _ = init_vuz(self.A, self.D, x, lbda, device=self.device)
 
         for layer_params in self.layers_parameters[:output_layer]:
             # retrieve parameters
             step_size = layer_params['step_size']
-            mul_lbda = float(layer_params.get('threshold', 1.0))
+            mul_lbda = layer_params.get('threshold', 1.0)
+            mul_lbda = check_tensor(mul_lbda, device=self.device)
             W = self.Psi_A_ * step_size
 
             # apply one 'dual iteration'
@@ -394,13 +398,14 @@ class CoupledCondatVu(_ListaAnalysis):
         )
 
         # initialized variables
-        v, u, _ = init_vuz(self.A, self.D, x, lbda)
-        v_old, u_old, _ = init_vuz(self.A, self.D, x, lbda)
+        v, u, _ = init_vuz(self.A, self.D, x, lbda, device=self.device)
+        v_old, u_old, _ = init_vuz(self.A, self.D, x, lbda, device=self.device)
 
         for layer_params in self.layers_parameters[:output_layer]:
             # retrieve parameters
             W = layer_params['W_coupled']
             mul_lbda = layer_params.get('threshold', 1.0)
+            mul_lbda = check_tensor(mul_lbda, device=self.device)
             sigma = self.sigma
             tau = self.tau
             rho = self.rho
@@ -466,8 +471,8 @@ class StepCondatVu(_ListaAnalysis):
         )
 
         # initialized variables
-        v, u, _ = init_vuz(self.A, self.D, x, lbda)
-        v_old, u_old, _ = init_vuz(self.A, self.D, x, lbda)
+        v, u, _ = init_vuz(self.A, self.D, x, lbda, device=self.device)
+        v_old, u_old, _ = init_vuz(self.A, self.D, x, lbda, device=self.device)
 
         for layer_params in self.layers_parameters[:output_layer]:
             # retrieve parameters
@@ -539,7 +544,7 @@ class LpgdTautString(_ListaAnalysis):
         for layer_params in self.layers_parameters[:output_layer]:
             # retrieve parameters
             mul_lbda = layer_params.get('threshold', 1.0 / self.l_)
-            mul_lbda = check_tensor(float(mul_lbda))
+            mul_lbda = check_tensor(mul_lbda, device=self.device)
             Wx = layer_params['Wx']
             Wu = layer_params['Wu']
 
