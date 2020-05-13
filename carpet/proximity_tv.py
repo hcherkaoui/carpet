@@ -18,8 +18,8 @@ class ProxTV_l1(torch.autograd.Function):
     def forward(ctx, x, lbda):
         # Convert input to numpy array to use the prox_tv library
         device = x.device
-        x = x.cpu()
-        lbda = lbda.cpu()
+        x = x.detach().cpu().data
+        lbda = lbda.detach().cpu().data
 
         # Get back a tensor for the output and save it for the backward pass
         output = check_tensor(
