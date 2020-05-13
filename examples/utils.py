@@ -20,8 +20,9 @@ from carpet.proximity import pseudo_soft_th_numpy
 memory = Memory('__cache_dir__', verbose=0)
 
 
-def _synthesis_learned_algo(x_train, x_test, A, D, L, lbda, all_n_layers,
-                            type_, verbose=1):
+@memory.cache
+def synthesis_learned_algo(x_train, x_test, A, D, L, lbda, all_n_layers,
+                           type_, verbose=1):
     """ NN-algo solver for synthesis TV problem. """
     params = None
 
@@ -73,11 +74,9 @@ def _synthesis_learned_algo(x_train, x_test, A, D, L, lbda, all_n_layers,
     return to_return
 
 
-synthesis_learned_algo = memory.cache(_synthesis_learned_algo)
-
-
-def _analysis_learned_algo(x_train, x_test, A, D, L, lbda, all_n_layers, type_,
-                           verbose=1):
+@memory.cache
+def analysis_learned_algo(x_train, x_test, A, D, L, lbda, all_n_layers, type_,
+                          verbose=1):
     """ NN-algo solver for analysis TV problem. """
     params = None
 
@@ -132,7 +131,59 @@ def _analysis_learned_algo(x_train, x_test, A, D, L, lbda, all_n_layers, type_,
     return to_return
 
 
-analysis_learned_algo = memory.cache(_analysis_learned_algo)
+@memory.cache
+def analysis_learned_taut_string(x_train, x_test, A, D, L, lbda, all_n_layers,
+                                 type_=None, verbose=1):
+    """ NN-algo solver for analysis TV problem. """
+    params = None
+    l_loss = []
+
+    def record_loss(l_loss, u_train, u_test):
+        l_loss.append(dict(
+            train_loss=analysis_primal_obj(u_train, A, D, x_train, lbda),
+            test_loss=analysis_primal_obj(u_test, A, D, x_test, lbda),
+            train_reg=tv_reg(u_train, D),
+            test_reg=tv_reg(u_test, D)
+        ))
+        return l_loss
+
+    _, u0_train, _ = init_vuz(A, D, x_train, lbda)
+    _, u0_test, _ = init_vuz(A, D, x_test, lbda)
+    record_loss(l_loss, u0_train, u0_test)
+
+    for n, n_layers in enumerate(all_n_layers):
+
+        # Declare network for the given number of layers. Warm-init the first
+        # layers with parameters learned with previous networks if any.
+        algo = LearnTVAlgo(algo_type='lpgd_taut_string', A=A,
+                           n_layers=n_layers, max_iter=500, device='cpu',
+                           initial_parameters=params, verbose=0)
+
+        # train
+        t0_ = time.time()
+        algo.fit(x_train, lbda=lbda)
+        delta_ = time.time() - t0_
+
+        # save parameters
+        params = algo.export_parameters()
+
+        # get train and test error
+        u_train = algo.transform(x_train, lbda, output_layer=n_layers)
+        u_test = algo.transform(x_test, lbda, output_layer=n_layers)
+        l_loss = record_loss(l_loss, u_train, u_test)
+
+        if verbose > 0:
+            train_loss = l_loss[n]['train_loss']
+            test_loss = l_loss[n]['test_loss']
+            print(f"[{algo.name}|layers#{n_layers:3d}] model fitted "
+                  f"{delta_:4.1f}s train-loss={train_loss:.8e} "
+                  f"test-loss={test_loss:.8e}")
+
+    df = pd.DataFrame(l_loss)
+    to_return = (df['train_loss'].values, df['test_loss'].values,
+                 df['train_reg'].values, df['test_reg'].values)
+
+    return to_return
 
 
 def synthesis_iter_algo(x_train, x_test, A, D, L, lbda, all_n_layers, type_,
@@ -366,55 +417,3 @@ def analysis_primal_dual_iter_algo(x_train, x_test, A, D, L, lbda,
               f"train-loss={train_loss[-1]:.8e} test-loss={test_loss[-1]:.8e}")
 
     return train_loss, test_loss, train_reg, test_reg
-
-
-def analysis_learned_taut_string(x_train, x_test, A, D, L, lbda, all_n_layers,
-                                 type_=None, verbose=1):
-    """ NN-algo solver for analysis TV problem. """
-    params = None
-
-    # helper to record train/test loss
-    log = []
-
-    def record_loss(u_train, u_test):
-        log.append(dict(
-            train_loss=analysis_primal_obj(u_train, A, D, x_train, lbda),
-            test_loss=analysis_primal_obj(u_test, A, D, x_test, lbda),
-            train_reg=tv_reg(u_train, D),
-            test_reg=tv_reg(u_test, D)
-        ))
-
-    _, u0_train, _ = init_vuz(A, D, x_train, lbda)
-    _, u0_test, _ = init_vuz(A, D, x_test, lbda)
-    record_loss(u0_train, u0_test)
-
-    for n_layers in all_n_layers:
-
-        # Declare network for the given number of layers. Warm-init the first
-        # layers with parameters learned with previous networks if any.
-        algo = LearnTVAlgo(algo_type='lpgd_taut_string', A=A,
-                           n_layers=n_layers, max_iter=500, device='cpu',
-                           initial_parameters=params, verbose=0)
-
-        # train
-        t0_ = time.time()
-        algo.fit(x_train, lbda=lbda)
-        delta_ = time.time() - t0_
-
-        # save parameters
-        params = algo.export_parameters()
-
-        # get train and test error
-        u_train = algo.transform(x_train, lbda, output_layer=n_layers)
-        u_test = algo.transform(x_test, lbda, output_layer=n_layers)
-        record_loss(u_train, u_test)
-
-        if verbose > 0:
-            print(f"[{algo.name}|layers#{n_layers:3d}] model fitted "
-                  f"{delta_:4.1f}s")
-
-    df = pd.DataFrame(log)
-    to_return = (df['train_loss'].values, df['test_loss'].values,
-                 df['train_reg'].values, df['test_reg'].values)
-
-    return to_return
