@@ -115,10 +115,10 @@ class ListaTV(ListaBase):
                          initial_parameters=initial_parameters, name=name,
                          verbose=verbose, device=device)
 
-        self.prox_tv = ListaLASSO(A=self.I_k, n_layers=20, learn_th=True,
-                                  max_iter=100, net_solver_type="recursive",
+        self.prox_tv = ListaLASSO(A=self.I_k, n_layers=500, learn_th=True,
+                                  max_iter=300, net_solver_type="recursive",
                                   initial_parameters=[], name="Prox-TV",
-                                  verbose=0, device=device)
+                                  verbose=0, device=self.device)
 
     def _init_network_parameters(self, initial_parameters=[]):
         """ Initialize the parameters of the network. """
@@ -162,7 +162,8 @@ class ListaTV(ListaBase):
 
             # apply one 'iteration'
             u = u.matmul(Wu) + x.matmul(Wx)
-            u = self.prox_tv(x=u, lbda=float(lbda*mul_lbda))
+            z = self.prox_tv(x=u, lbda=float(lbda*mul_lbda))
+            u = torch.cumsum(z, dim=1)
 
         return u
 
