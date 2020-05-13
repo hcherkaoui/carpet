@@ -8,10 +8,10 @@ import time
 import matplotlib.pyplot as plt
 import numpy as np
 from joblib import Memory
+from prox_tv import tv1_1d
 from carpet.datasets import synthetic_1d_dataset
 from carpet.checks import check_random_state
 from carpet.loss_gradient import l1_reg
-from carpet import LearnTVAlgo
 
 
 if __name__ == '__main__':
@@ -29,56 +29,38 @@ if __name__ == '__main__':
     # Define variables and data
 
     # Define variables
-    n_samples = 100
-    n_samples_testing = 50
-    n_atoms = 10
-    n_dim = 5
+    n_samples = 1000
+    n_atoms = 20
     s = 0.2
     snr = 0.0
-    n_layers = 50
-    lbdas = np.linspace(0.0, 1.5, 10)
+    lbdas = np.linspace(0.0, 2.0, 20)
 
     seed = np.random.randint(0, 1000)
     rng = check_random_state(seed)
     print(f'Seed used = {seed}')  # noqa: E999
 
     # Generate data
-    results = synthetic_1d_dataset(n_atoms=n_atoms, n_dim=n_dim, n=n_samples,
-                                   s=s, snr=snr, seed=seed)
-    x, _, z, L, D, A = results
+    results = synthetic_1d_dataset(A=np.eye(n_atoms), n=n_samples, s=s, snr=snr,
+                                   seed=seed)
+    x, _, _, _, _, _ = results
 
-    x_train = x[n_samples_testing:, :]
-    x_test = x[:n_samples_testing, :]
 
     ###########################################################################
     # Main experiment
-    l_train_reg, l_test_reg = [], []
+    l_u_reg = []
     for lbda in lbdas:
-        algo = LearnTVAlgo(algo_type='origista', A=A, n_layers=n_layers,
-                           max_iter=500, device='cpu', verbose=0)
-        t0_ = time.time()
-        algo.fit(x_train, lbda=lbda)
-        delta_ = time.time() - t0_
-        z_train = algo.transform(x_train, lbda, output_layer=n_layers)
-        z_test = algo.transform(x_test, lbda, output_layer=n_layers)
-        train_reg = l1_reg(z_train)
-        test_reg = l1_reg(z_test)
-        l_train_reg.append(train_reg)
-        l_test_reg.append(test_reg)
-        print(f"[{algo.name}|lbda#{lbda:.3f}] model fitted "
-              f"{delta_:3.1f}s train-reg={train_reg:.3e} "
-              f"test-reg={test_reg:.3e}")
+        u = np.c_[[tv1_1d(x_, lbda) for x_ in x]]
+        l_u_reg.append(np.mean(u))
+        print(f"[Analysis|lbda#{lbda:.3f}] reg={np.mean(u):.3e} ")
 
     ###########################################################################
     # Plotting
-    lw = 4
-
+    lw = 3
+    l_u_reg = np.array(l_u_reg)
     plt.figure(f"[{__file__}] Reg evolution", figsize=(6, 3))
-    plt.plot(lbdas, l_train_reg, ls='-', lw=4, label='Training set')
-    plt.plot(lbdas, l_test_reg, ls='--', lw=4, label='Testing set')
-    plt.axvline(1.0, ls='--', lw=4, color='k')
-    plt.legend(bbox_to_anchor=(1.05, 1.0), loc='upper left',
-                      borderaxespad=0.0, fontsize=15)
+    plt.plot(lbdas, l_u_reg, ls='-', lw=lw)
+    plt.axvline(1.0, ls='--', lw=lw, color='k')
+    plt.axhline(np.mean(x), ls='--', lw=lw, color='k')
     plt.grid()
     plt.xlabel("Reg. ratio", fontsize=15)
     plt.ylabel('Mean reg. term', fontsize=15)

@@ -4,6 +4,7 @@
 
 import time
 import numpy as np
+from joblib import Memory
 from prox_tv import tv1_1d
 from carpet import LearnTVAlgo
 from carpet.utils import init_vuz, v_to_u
@@ -14,8 +15,11 @@ from carpet.optimization import fista, condatvu
 from carpet.proximity import pseudo_soft_th_numpy
 
 
-def learned_lasso_like_tv(x_train, x_test, A, D, L, lbda, all_n_layers, type_,
-                          verbose=1):
+memory = Memory('__cache_dir__', verbose=0)
+
+
+def _synthesis_learned_algo(x_train, x_test, A, D, L, lbda, all_n_layers,
+                            type_, verbose=1):
     """ NN-algo solver for synthesis TV problem. """
     params = None
 
@@ -32,11 +36,11 @@ def learned_lasso_like_tv(x_train, x_test, A, D, L, lbda, all_n_layers, type_,
         # declare network
         if params is not None:
             algo = LearnTVAlgo(algo_type=type_, A=A, n_layers=n_layers,
-                               max_iter=500, device='cpu',
+                               max_iter=300, device='cpu',
                                initial_parameters=params, verbose=0)
         else:
             algo = LearnTVAlgo(algo_type=type_, A=A, n_layers=n_layers,
-                               max_iter=500, device='cpu', verbose=0)
+                               max_iter=300, device='cpu', verbose=0)
 
         t0_ = time.time()
         algo.fit(x_train, lbda=lbda)
@@ -58,8 +62,8 @@ def learned_lasso_like_tv(x_train, x_test, A, D, L, lbda, all_n_layers, type_,
 
         if verbose > 0:
             print(f"[{algo.name}|layers#{n_layers:3d}] model fitted "
-                  f"{delta_:4.1f}s train-loss={train_loss_:.6e} "
-                  f"test-loss={test_loss_:.6e}")
+                  f"{delta_:4.1f}s train-loss={train_loss_:.8e} "
+                  f"test-loss={test_loss_:.8e}")
 
     to_return = (np.array(train_loss), np.array(test_loss),
                  np.array(train_reg), np.array(test_reg))
@@ -67,8 +71,70 @@ def learned_lasso_like_tv(x_train, x_test, A, D, L, lbda, all_n_layers, type_,
     return to_return
 
 
-def lasso_like_tv(x_train, x_test, A, D, L, lbda, all_n_layers, type_,
-                  verbose=1):
+synthesis_learned_algo = memory.cache(_synthesis_learned_algo)
+
+
+def _analysis_learned_algo(x_train, x_test, A, D, L, lbda, all_n_layers, type_,
+                           verbose=1):
+    """ NN-algo solver for analysis TV problem. """
+    params = None
+
+    _, u0_train, _ = init_vuz(A, D, x_train, lbda)
+    _, u0_test, _ = init_vuz(A, D, x_test, lbda)
+
+    train_loss_init = analysis_primal_obj(u0_train, A, D, x_train, lbda)
+    test_loss_init = analysis_primal_obj(u0_test, A, D, x_test, lbda)
+    train_loss, test_loss = [train_loss_init], [test_loss_init]
+    train_reg, test_reg = [tv_reg(u0_train, D)], [tv_reg(u0_test, D)]
+
+    algo_type = 'origtv' if ('untrained' in type_) else type_
+
+    for n_layers in all_n_layers:
+
+        # declare network
+        if params is not None:
+            algo = LearnTVAlgo(algo_type=algo_type, A=A, n_layers=n_layers,
+                               max_iter=300, device='cpu',
+                               initial_parameters=params, verbose=0)
+        else:
+            algo = LearnTVAlgo(algo_type=algo_type, A=A, n_layers=n_layers,
+                               max_iter=300, device='cpu', verbose=0)
+
+        t0_ = time.time()
+        if 'untrained' not in type_:
+            algo.fit(x_train, lbda=lbda)
+        delta_ = time.time() - t0_
+
+        # save parameters
+        params = algo.export_parameters()
+
+        # get train and test error
+        u_train = algo.transform(x_train, lbda, output_layer=n_layers)
+        train_loss_ = analysis_primal_obj(u_train, A, D, x_train, lbda)
+        train_loss.append(train_loss_)
+        train_reg.append(tv_reg(u_train, D))
+
+        u_test = algo.transform(x_test, lbda, output_layer=n_layers)
+        test_loss_ = analysis_primal_obj(u_test, A, D, x_test, lbda)
+        test_loss.append(test_loss_)
+        test_reg.append(tv_reg(u_test, D))
+
+        if verbose > 0:
+            print(f"[{algo.name}|layers#{n_layers:3d}] model fitted "
+                  f"{delta_:4.1f}s train-loss={train_loss_:.8e} "
+                  f"test-loss={test_loss_:.8e}")
+
+    to_return = (np.array(train_loss), np.array(test_loss),
+                 np.array(train_reg), np.array(test_reg))
+
+    return to_return
+
+
+analysis_learned_algo = memory.cache(_analysis_learned_algo)
+
+
+def synthesis_iter_algo(x_train, x_test, A, D, L, lbda, all_n_layers, type_,
+                        verbose=1):
     """ Iterative-algo solver for synthesis TV problem. """
     name = 'ISTA' if type_ == 'chambolle' else 'FISTA'
     max_iter = all_n_layers[-1]
@@ -117,13 +183,13 @@ def lasso_like_tv(x_train, x_test, A, D, L, lbda, all_n_layers, type_,
 
     if verbose > 0:
         print(f"[{name}] iterations finished "
-              f"train-loss={train_loss[-1]:.6e} test-loss={test_loss[-1]:.6e}")
+              f"train-loss={train_loss[-1]:.8e} test-loss={test_loss[-1]:.8e}")
 
     return train_loss, test_loss, train_reg, test_reg
 
 
-def analysis_tv(x_train, x_test, A, D, L, lbda, all_n_layers, type_,
-                verbose=1):
+def analysis_primal_iter_algo(x_train, x_test, A, D, L, lbda, all_n_layers,
+                              type_, verbose=1):
     """ Iterative-algo solver for synthesis TV problem. """
     name = 'ISTA' if type_ == 'ista' else 'FISTA'
     max_iter = all_n_layers[-1]
@@ -176,60 +242,8 @@ def analysis_tv(x_train, x_test, A, D, L, lbda, all_n_layers, type_,
     return train_loss, test_loss, train_reg, test_reg
 
 
-def learned_chambolle_tv(x_train, x_test, A, D, L, lbda, all_n_layers, type_,
-                         verbose=1):
-    """ NN-algo solver for analysis TV problem. """
-    params = None
-
-    _, u0_train, _ = init_vuz(A, D, x_train, lbda)
-    _, u0_test, _ = init_vuz(A, D, x_test, lbda)
-
-    train_loss_init = analysis_primal_obj(u0_train, A, D, x_train, lbda)
-    test_loss_init = analysis_primal_obj(u0_test, A, D, x_test, lbda)
-    train_loss, test_loss = [train_loss_init], [test_loss_init]
-    train_reg, test_reg = [tv_reg(u0_train, D)], [tv_reg(u0_test, D)]
-
-    for n_layers in all_n_layers:
-
-        # declare network
-        if params is not None:
-            algo = LearnTVAlgo(algo_type=type_, A=A, n_layers=n_layers,
-                               max_iter=500, device='cpu',
-                               initial_parameters=params, verbose=0)
-        else:
-            algo = LearnTVAlgo(algo_type=type_, A=A, n_layers=n_layers,
-                               max_iter=500, device='cpu', verbose=0)
-
-        t0_ = time.time()
-        algo.fit(x_train, lbda=lbda)
-        delta_ = time.time() - t0_
-
-        # save parameters
-        params = algo.export_parameters()
-
-        # get train and test error
-        u_train = algo.transform(x_train, lbda, output_layer=n_layers)
-        train_loss_ = analysis_primal_obj(u_train, A, D, x_train, lbda)
-        train_loss.append(train_loss_)
-        train_reg.append(tv_reg(u_train, D))
-
-        u_test = algo.transform(x_test, lbda, output_layer=n_layers)
-        test_loss_ = analysis_primal_obj(u_test, A, D, x_test, lbda)
-        test_loss.append(test_loss_)
-        test_reg.append(tv_reg(u_test, D))
-
-        if verbose > 0:
-            print(f"[{algo.name}|layers#{n_layers:3d}] model fitted "
-                  f"{delta_:4.1f}s train-loss={train_loss_:.6e} "
-                  f"test-loss={test_loss_:.6e}")
-
-    to_return = (np.array(train_loss), np.array(test_loss),
-                 np.array(train_reg), np.array(test_reg))
-
-    return to_return
-
-
-def chambolle_tv(x_train, x_test, A, D, L, lbda, all_n_layers, type_):
+def analysis_dual_iter_algo(x_train, x_test, A, D, L, lbda, all_n_layers,
+                            type_):
     """ Chambolle solver for analysis TV problem. """
     inv_A = np.linalg.pinv(A)
     Psi_A = inv_A.dot(D)
@@ -291,8 +305,8 @@ def chambolle_tv(x_train, x_test, A, D, L, lbda, all_n_layers, type_):
     return train_loss, test_loss, train_reg, test_reg
 
 
-def condatvu_tv(x_train, x_test, A, D, L, lbda, all_n_layers, type_,
-                verbose=1):
+def analysis_primal_dual_iter_algo(x_train, x_test, A, D, L, lbda,
+                                   all_n_layers, type_, verbose=1):
     """ Condat-Vu solver for analysis TV problem. """
     max_iter = all_n_layers[-1]
     rho = 1.0
@@ -347,6 +361,6 @@ def condatvu_tv(x_train, x_test, A, D, L, lbda, all_n_layers, type_,
 
     if verbose > 0:
         print(f"[Condat-Vu] iterations finished "
-              f"train-loss={train_loss[-1]:.6e} test-loss={test_loss[-1]:.6e}")
+              f"train-loss={train_loss[-1]:.8e} test-loss={test_loss[-1]:.8e}")
 
     return train_loss, test_loss, train_reg, test_reg
