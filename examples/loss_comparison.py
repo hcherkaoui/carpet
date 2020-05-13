@@ -31,6 +31,9 @@ if __name__ == '__main__':
     parser.add_argument('--gpu', type=int, default=None,
                         help='Use GPU <gpu> to run the computations. If it is '
                         'not set, use CPU computations.')
+    parser.add_argument('--max-iter', type=int, default=300,
+                        help='Max number of iterations to train the '
+                        'learnable networks.')
     args = parser.parse_args()
 
     if args.gpu is not None:
@@ -119,7 +122,7 @@ if __name__ == '__main__':
 
             results = func_bench(x_train, x_test, A, D, L, lbda=lbda,
                                  type_=type_, all_n_layers=all_n_layers,
-                                 device=device)
+                                 device=device, max_iter=args.max_iter)
             train_loss, test_loss, train_reg, test_reg = results
             l_train_loss.append(train_loss)
             l_test_loss.append(test_loss)

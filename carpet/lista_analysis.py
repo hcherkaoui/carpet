@@ -22,8 +22,6 @@ class _ListaAnalysis(ListaBase):
     def _loss_fn(self, x, lbda, z):
         """ Target loss function. """
         n_samples = x.shape[0]
-        x = check_tensor(x, device=self.device)
-        z = check_tensor(z, device=self.device)
         residual = z.matmul(self.A_) - x
         loss = 0.5 * (residual * residual).sum()
         reg = lbda * torch.abs(z[:, 1:] - z[:, :-1]).sum()
@@ -40,8 +38,6 @@ class _ListaAnalysisDual(ListaBase):
     def _loss_fn(self, x, lbda, v):
         """ Target loss function. """
         n_samples = x.shape[0]
-        x = check_tensor(x, device=self.device)
-        v = check_tensor(v, device=self.device)
         if (torch.abs(v) <= lbda).all():
             residual = v.matmul(self.Psi_A_.t())
             cost = 0.5 * (residual * residual).sum()
@@ -67,6 +63,7 @@ class StepSubGradTV(_ListaAnalysis):
 
         self.A_ = check_tensor(self.A, device=device)
         self.D_ = check_tensor(self.D, device=device)
+        self.inv_A_ = torch.pinverse(self.A_)
 
         if learn_th:
             print("In StepSubGradTV learn_th can't be enable, ignore it.")
@@ -83,9 +80,10 @@ class StepSubGradTV(_ListaAnalysis):
     def forward(self, x, lbda, output_layer=None):
         """ Forward pass of the network. """
         # check inputs
-        x, output_layer = self._check_forward_inputs(
-            x, output_layer, enable_none=True
-        )
+        if output_layer > self.n_layers:
+            raise ValueError(f"Requested output from out-of-bound layer "
+                             f"output_layer={output_layer} "
+                             f"(n_layers={self.n_layers})")
 
         # initialized variables
         _, u, _ = init_vuz(self.A, self.D, x, lbda, device=self.device)
@@ -120,6 +118,7 @@ class ListaTV(_ListaAnalysis):
         self.D = (np.eye(n_atoms, k=-1) - np.eye(n_atoms, k=0))[:, :-1]
 
         self.A_ = check_tensor(self.A, device=device)
+        self.inv_A_ = torch.pinverse(self.A_)
         self.l_ = np.linalg.norm(self.A, ord=2) ** 2
 
         super().__init__(n_layers=n_layers, learn_th=learn_th,
@@ -141,12 +140,14 @@ class ListaTV(_ListaAnalysis):
     def forward(self, x, lbda, output_layer=None):
         """ Forward pass of the network. """
         # check inputs
-        x, output_layer = self._check_forward_inputs(
-            x, output_layer, enable_none=True
-        )
+        if output_layer > self.n_layers:
+            raise ValueError(f"Requested output from out-of-bound layer "
+                             f"output_layer={output_layer} "
+                             f"(n_layers={self.n_layers})")
 
         # initialized variables
-        _, u, _ = init_vuz(self.A, self.D, x, lbda, device=self.device)
+        _, u, _ = init_vuz(self.A, self.D, x, lbda, inv_A=self.inv_A_,
+                           device=self.device)
 
         for layer_params in self.layers_parameters[:output_layer]:
             # retrieve parameters
@@ -180,6 +181,7 @@ class OrigChambolleTV(_ListaAnalysisDual):
 
         self.A_ = check_tensor(self.A, device=device)
         self.D_ = check_tensor(self.D, device=device)
+        self.inv_A_ = torch.pinverse(self.A_)
 
         self.Psi_A = np.linalg.pinv(self.A).dot(self.D)
         self.Psi_AtPsi_A = self.Psi_A.T.dot(self.Psi_A)
@@ -207,12 +209,14 @@ class OrigChambolleTV(_ListaAnalysisDual):
     def forward(self, x, lbda, output_layer=None):
         """ Forward pass of the network. """
         # check inputs
-        x, output_layer = self._check_forward_inputs(
-            x, output_layer, enable_none=True
-        )
+        if output_layer > self.n_layers:
+            raise ValueError(f"Requested output from out-of-bound layer "
+                             f"output_layer={output_layer} "
+                             f"(n_layers={self.n_layers})")
 
         # initialized variables
-        v, _, _ = init_vuz(self.A, self.D, x, lbda, device=self.device)
+        v, _, _ = init_vuz(self.A, self.D, x, lbda, inv_A=self.inv_A_,
+                           device=self.device)
 
         for layer_params in self.layers_parameters[:output_layer]:
             # retrieve parameters
@@ -268,13 +272,13 @@ class CoupledChambolleTV(_ListaAnalysisDual):
     def forward(self, x, lbda, output_layer=None):
         """ Forward pass of the network. """
         # check inputs
-        x, output_layer = self._check_forward_inputs(
-            x, output_layer, enable_none=True
-        )
+        if output_layer > self.n_layers:
+            raise ValueError(f"Requested output from out-of-bound layer "
+                             f"output_layer={output_layer} "
+                             f"(n_layers={self.n_layers})")
 
         # initialized variables
         v, _, _ = init_vuz(self.A, self.D, x, lbda, device=self.device)
-        v = check_tensor(v, device=self.device)
 
         for layer_params in self.layers_parameters[:output_layer]:
             # retrieve parameters
@@ -329,9 +333,10 @@ class StepChambolleTV(_ListaAnalysisDual):
     def forward(self, x, lbda, output_layer=None):
         """ Forward pass of the network. """
         # check inputs
-        x, output_layer = self._check_forward_inputs(
-            x, output_layer, enable_none=True
-        )
+        if output_layer > self.n_layers:
+            raise ValueError(f"Requested output from out-of-bound layer "
+                             f"output_layer={output_layer} "
+                             f"(n_layers={self.n_layers})")
 
         # initialized variables
         v, _, _ = init_vuz(self.A, self.D, x, lbda, device=self.device)
@@ -368,6 +373,7 @@ class CoupledCondatVu(_ListaAnalysis):
 
         self.A_ = check_tensor(self.A, device=device)
         self.D_ = check_tensor(self.D, device=device)
+        self.inv_A_ = torch.pinverse(self.A_)
 
         self.l_A = np.linalg.norm(self.A, ord=2) ** 2
         self.l_D = np.linalg.norm(self.D, ord=2) ** 2
@@ -391,13 +397,15 @@ class CoupledCondatVu(_ListaAnalysis):
     def forward(self, x, lbda, output_layer=None):
         """ Forward pass of the network. """
         # check inputs
-        x, output_layer = self._check_forward_inputs(
-            x, output_layer, enable_none=True
-        )
+        if output_layer > self.n_layers:
+            raise ValueError(f"Requested output from out-of-bound layer "
+                             f"output_layer={output_layer} "
+                             f"(n_layers={self.n_layers})")
 
         # initialized variables
-        v, u, _ = init_vuz(self.A, self.D, x, lbda, device=self.device)
-        v_old, u_old, _ = init_vuz(self.A, self.D, x, lbda, device=self.device)
+        v, u, _ = init_vuz(self.A, self.D, x, lbda, inv_A=self.inv_A_,
+                           device=self.device)
+        v_old, u_old = v.clone(), u.clone()
 
         for layer_params in self.layers_parameters[:output_layer]:
             # retrieve parameters
@@ -443,6 +451,7 @@ class StepCondatVu(_ListaAnalysis):
 
         self.A_ = check_tensor(self.A, device=device)
         self.D_ = check_tensor(self.D, device=device)
+        self.inv_A_ = torch.pinverse(self.A_)
 
         self.l_A = np.linalg.norm(self.A, ord=2) ** 2
         self.l_D = np.linalg.norm(self.D, ord=2) ** 2
@@ -464,12 +473,14 @@ class StepCondatVu(_ListaAnalysis):
     def forward(self, x, lbda, output_layer=None):
         """ Forward pass of the network. """
         # check inputs
-        x, output_layer = self._check_forward_inputs(
-            x, output_layer, enable_none=True
-        )
+        if output_layer > self.n_layers:
+            raise ValueError(f"Requested output from out-of-bound layer "
+                             f"output_layer={output_layer} "
+                             f"(n_layers={self.n_layers})")
 
         # initialized variables
-        v, u, _ = init_vuz(self.A, self.D, x, lbda, device=self.device)
+        v, u, _ = init_vuz(self.A, self.D, x, lbda, inv_A=self.inv_A_,
+                           device=self.device)
         v_old, u_old, _ = init_vuz(self.A, self.D, x, lbda, device=self.device)
 
         for layer_params in self.layers_parameters[:output_layer]:
@@ -514,6 +525,7 @@ class LpgdTautString(_ListaAnalysis):
         self.D = (np.eye(n_atoms, k=-1) - np.eye(n_atoms, k=0))[:, :-1]
 
         self.A_ = check_tensor(self.A, device=device)
+        self.inv_A_ = torch.pinverse(self.A_)
         self.l_ = np.linalg.norm(self.A, ord=2) ** 2
 
         super().__init__(n_layers=n_layers, learn_th=learn_th,
@@ -532,12 +544,14 @@ class LpgdTautString(_ListaAnalysis):
     def forward(self, x, lbda, output_layer=None):
         """ Forward pass of the network. """
         # check inputs
-        x, output_layer = self._check_forward_inputs(
-            x, output_layer, enable_none=True
-        )
+        if output_layer > self.n_layers:
+            raise ValueError(f"Requested output from out-of-bound layer "
+                             f"output_layer={output_layer} "
+                             f"(n_layers={self.n_layers})")
 
         # initialized variables
-        _, u, _ = init_vuz(self.A, self.D, x, lbda, device=self.device)
+        _, u, _ = init_vuz(self.A, self.D, x, lbda, inv_A=self.inv_A_,
+                           device=self.device)
 
         for layer_params in self.layers_parameters[:output_layer]:
             # retrieve parameters

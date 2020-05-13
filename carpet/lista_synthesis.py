@@ -13,15 +13,40 @@ from .utils import init_vuz
 class _ListaSynthesis(ListaBase):
     """Basis class for learn algorithms with synthesis formulation"""
 
+    def __init__(self, A, n_layers, learn_th=True, max_iter=100,
+                 net_solver_type="recursive", initial_parameters=None,
+                 name=None, verbose=0, device=None):
+        if name is None:
+            name = self.default_name
+
+        n_atoms = A.shape[0]
+
+        self.A = np.array(A)
+        self.L = np.triu(np.ones((n_atoms, n_atoms)))
+        self.D = (np.eye(n_atoms, k=-1) - np.eye(n_atoms, k=0))[:, :-1]
+
+        self.A_ = check_tensor(self.A, device=device)
+        self.D_ = check_tensor(self.D, device=device)
+        self.L_ = check_tensor(self.L, device=device)
+        self.inv_A_ = torch.pinverse(self.A_)
+
+        self.LA = self.L.dot(self.A)
+        self.l_ = np.linalg.norm(self.LA.T, ord=2) ** 2
+
+        super().__init__(n_layers=n_layers, learn_th=learn_th,
+                         max_iter=max_iter, net_solver_type=net_solver_type,
+                         initial_parameters=initial_parameters, name=name,
+                         verbose=verbose, device=device)
+
     def transform(self, x, lbda, output_layer=None):
+        x = check_tensor(x, device=self.device)
+        lbda = check_tensor(lbda, device=self.device)
         with torch.no_grad():
             return self(x, lbda, output_layer=output_layer).cpu().numpy()
 
     def _loss_fn(self, x, lbda, z):
         """ Target loss function. """
         n_samples = x.shape[0]
-        x = check_tensor(x, device=self.device)
-        z = check_tensor(z, device=self.device)
         residual = z.matmul(self.L_).matmul(self.A_) - x
         loss = 0.5 * (residual * residual).sum()
         reg = torch.abs(z[:, 1:]).sum()
@@ -35,25 +60,7 @@ class ListaLASSO(_ListaSynthesis):
         descr='original parametrization from Gregor and Le Cun (2010)'
     )
 
-    def __init__(self, A, n_layers, learn_th=True, max_iter=100,
-                 net_solver_type="recursive", initial_parameters=None,
-                 name="LISTA", verbose=0, device=None):
-
-        n_atoms = A.shape[0]
-
-        self.A = np.array(A)
-        self.L = np.triu(np.ones((n_atoms, n_atoms)))
-
-        self.A_ = check_tensor(self.A, device=device)
-        self.L_ = check_tensor(self.L, device=device)
-
-        self.LA = self.L.dot(self.A)
-        self.l_ = np.linalg.norm(self.LA.T, ord=2) ** 2
-
-        super().__init__(n_layers=n_layers, learn_th=learn_th,
-                         max_iter=max_iter, net_solver_type=net_solver_type,
-                         initial_parameters=initial_parameters, name=name,
-                         verbose=verbose, device=device)
+    default_name = "Lista"
 
     def get_layer_parameters(self, layer):
         n_atoms = self.A.shape[0]
@@ -68,14 +75,14 @@ class ListaLASSO(_ListaSynthesis):
     def forward(self, x, lbda, output_layer=None):
         """ Forward pass of the network. """
         # check inputs
-        x, output_layer = self._check_forward_inputs(
-            x, output_layer, enable_none=True
-        )
+        if output_layer > self.n_layers:
+            raise ValueError(f"Requested output from out-of-bound layer "
+                             f"output_layer={output_layer} "
+                             f"(n_layers={self.n_layers})")
 
         # initialized variables
-        n_atoms = self.A.shape[0]
-        D = (np.eye(n_atoms, k=-1) - np.eye(n_atoms, k=0))[:, :-1]
-        _, _, z = init_vuz(self.A, D, x, lbda, device=self.device)
+        _, _, z = init_vuz(self.A, self.D, x, lbda, inv_A=self.inv_A_,
+                           device=self.device)
 
         for layer_params in self.layers_parameters[:output_layer]:
             # retrieve parameters
@@ -98,24 +105,7 @@ class CoupledIstaLASSO(_ListaSynthesis):
         descr='one weight parametrization from Chen et al (2018)'
     )
 
-    def __init__(self, A, n_layers, learn_th=True, max_iter=100,
-                 net_solver_type="recursive", initial_parameters=None,
-                 name="Coupled-LISTA", verbose=0, device=None):
-
-        n_atoms = A.shape[0]
-        self.A = np.array(A)
-        self.L = np.triu(np.ones((n_atoms, n_atoms)))
-
-        self.A_ = check_tensor(self.A, device=device)
-        self.L_ = check_tensor(self.L, device=device)
-
-        self.LA = self.L.dot(self.A)
-        self.l_ = np.linalg.norm(self.LA.T, ord=2) ** 2
-
-        super().__init__(n_layers=n_layers, learn_th=learn_th,
-                         max_iter=max_iter, net_solver_type=net_solver_type,
-                         initial_parameters=initial_parameters, name=name,
-                         verbose=verbose, device=device)
+    default_name = "Coupled-LISTA"
 
     def get_layer_parameters(self, layer):
         layer_params = dict()
@@ -127,14 +117,14 @@ class CoupledIstaLASSO(_ListaSynthesis):
     def forward(self, x, lbda, output_layer=None):
         """ Forward pass of the network. """
         # check inputs
-        x, output_layer = self._check_forward_inputs(
-            x, output_layer, enable_none=True
-        )
+        if output_layer > self.n_layers:
+            raise ValueError(f"Requested output from out-of-bound layer "
+                             f"output_layer={output_layer} "
+                             f"(n_layers={self.n_layers})")
 
         # initialized variables
-        n_atoms = self.A.shape[0]
-        D = (np.eye(n_atoms, k=-1) - np.eye(n_atoms, k=0))[:, :-1]
-        _, _, z = init_vuz(self.A, D, x, lbda, device=self.device)
+        _, _, z = init_vuz(self.A, self.D, x, lbda, inv_A=self.inv_A_,
+                           device=self.device)
 
         for layer_params in self.layers_parameters[:output_layer]:
             # retrieve parameters
@@ -157,44 +147,26 @@ class StepIstaLASSO(_ListaSynthesis):
         descr='only learn a step size'
     )
 
-    def __init__(self, A, n_layers, learn_th=False, max_iter=100,
-                 net_solver_type='recursive', initial_parameters=None,
-                 name="Step-LISTA", verbose=0, device=None):
-
-        n_atoms = A.shape[0]
-
-        self.A = np.array(A)
-        self.L = np.triu(np.ones((n_atoms, n_atoms)))
-
-        self.A_ = check_tensor(self.A, device=device)
-        self.L_ = check_tensor(self.L, device=device)
-
-        self.LA = self.L.dot(self.A)
-        self.l_ = np.linalg.norm(self.LA.T, ord=2) ** 2
-
-        if learn_th:
-            print("In StepIstaLASSO learn_th can't be enable, ignore it.")
-
-        super().__init__(n_layers=n_layers, learn_th=learn_th,
-                         max_iter=max_iter, net_solver_type=net_solver_type,
-                         initial_parameters=initial_parameters, name=name,
-                         verbose=verbose, device=device)
+    default_name = "Step-LISTA"
 
     def get_layer_parameters(self, layer):
         """ Initialize the parameters of the network. """
+        if self.learn_th:
+            print("In StepIstaLASSO learn_th can't be enable, ignore it.")
+
         return dict(step_size=np.array(1.0 / self.l_))
 
     def forward(self, x, lbda, output_layer=None):
         """ Forward pass of the network. """
         # check inputs
-        x, output_layer = self._check_forward_inputs(
-            x, output_layer, enable_none=True
-        )
+        if output_layer > self.n_layers:
+            raise ValueError(f"Requested output from out-of-bound layer "
+                             f"output_layer={output_layer} "
+                             f"(n_layers={self.n_layers})")
 
         # initialized variables
-        n_atoms = self.A.shape[0]
-        D = (np.eye(n_atoms, k=-1) - np.eye(n_atoms, k=0))[:, :-1]
-        _, _, z = init_vuz(self.A, D, x, lbda, device=self.device)
+        _, _, z = init_vuz(self.A, self.D, x, lbda, inv_A=self.inv_A_,
+                           device=self.device)
 
         for layer_params in self.layers_parameters[:output_layer]:
             # retrieve parameters

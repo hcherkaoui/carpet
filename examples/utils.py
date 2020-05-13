@@ -22,7 +22,7 @@ memory = Memory('__cache_dir__', verbose=0)
 
 @memory.cache
 def synthesis_learned_algo(x_train, x_test, A, D, L, lbda, all_n_layers,
-                           type_, device=None, verbose=1):
+                           type_, max_iter=300, device=None, verbose=1):
     """ NN-algo solver for synthesis TV problem. """
     params = None
 
@@ -38,7 +38,7 @@ def synthesis_learned_algo(x_train, x_test, A, D, L, lbda, all_n_layers,
 
         # declare network
         algo = LearnTVAlgo(algo_type=type_, A=A, n_layers=n_layers,
-                           max_iter=300, device=device,
+                           max_iter=max_iter, device=device,
                            initial_parameters=params, verbose=verbose)
 
         t0_ = time.time()
@@ -72,7 +72,7 @@ def synthesis_learned_algo(x_train, x_test, A, D, L, lbda, all_n_layers,
 
 @memory.cache
 def analysis_learned_algo(x_train, x_test, A, D, L, lbda, all_n_layers, type_,
-                          device=None, verbose=1):
+                          max_iter=300, device=None, verbose=1):
     """ NN-algo solver for analysis TV problem. """
     params = None
 
@@ -90,7 +90,7 @@ def analysis_learned_algo(x_train, x_test, A, D, L, lbda, all_n_layers, type_,
 
         # declare network
         algo = LearnTVAlgo(algo_type=algo_type, A=A, n_layers=n_layers,
-                           max_iter=300, device=device,
+                           max_iter=max_iter, device=device,
                            initial_parameters=params, verbose=verbose)
 
         t0_ = time.time()
@@ -125,7 +125,8 @@ def analysis_learned_algo(x_train, x_test, A, D, L, lbda, all_n_layers, type_,
 
 @memory.cache
 def analysis_learned_taut_string(x_train, x_test, A, D, L, lbda, all_n_layers,
-                                 type_=None, device=None, verbose=1):
+                                 type_=None, max_iter=300, device=None,
+                                 verbose=1):
     """ NN-algo solver for analysis TV problem. """
     params = None
     l_loss = []
@@ -148,7 +149,7 @@ def analysis_learned_taut_string(x_train, x_test, A, D, L, lbda, all_n_layers,
         # Declare network for the given number of layers. Warm-init the first
         # layers with parameters learned with previous networks if any.
         algo = LearnTVAlgo(algo_type='lpgd_taut_string', A=A,
-                           n_layers=n_layers, max_iter=500, device=device,
+                           n_layers=n_layers, max_iter=max_iter, device=device,
                            initial_parameters=params, verbose=verbose)
 
         # train
@@ -179,7 +180,7 @@ def analysis_learned_taut_string(x_train, x_test, A, D, L, lbda, all_n_layers,
 
 
 def synthesis_iter_algo(x_train, x_test, A, D, L, lbda, all_n_layers, type_,
-                        device=None, verbose=1):
+                        max_iter=300, device=None, verbose=1):
     """ Iterative-algo solver for synthesis TV problem. """
     name = 'ISTA' if type_ == 'chambolle' else 'FISTA'
     max_iter = all_n_layers[-1]
@@ -234,7 +235,7 @@ def synthesis_iter_algo(x_train, x_test, A, D, L, lbda, all_n_layers, type_,
 
 
 def analysis_primal_iter_algo(x_train, x_test, A, D, L, lbda, all_n_layers,
-                              type_, device=None, verbose=1):
+                              type_, max_iter=300, device=None, verbose=1):
     """ Iterative-algo solver for synthesis TV problem. """
     name = 'ISTA' if type_ == 'ista' else 'FISTA'
     max_iter = all_n_layers[-1]
@@ -288,7 +289,7 @@ def analysis_primal_iter_algo(x_train, x_test, A, D, L, lbda, all_n_layers,
 
 
 def analysis_dual_iter_algo(x_train, x_test, A, D, L, lbda, all_n_layers,
-                            type_, device=None, verbose=1):
+                            type_, max_iter=300, device=None, verbose=1):
     """ Chambolle solver for analysis TV problem. """
     inv_A = np.linalg.pinv(A)
     Psi_A = inv_A.dot(D)
@@ -353,8 +354,8 @@ def analysis_dual_iter_algo(x_train, x_test, A, D, L, lbda, all_n_layers,
 
 
 def analysis_primal_dual_iter_algo(x_train, x_test, A, D, L, lbda,
-                                   all_n_layers, type_, device=None,
-                                   verbose=1):
+                                   all_n_layers, type_, max_iter=300,
+                                   device=None, verbose=1):
     """ Condat-Vu solver for analysis TV problem. """
     max_iter = all_n_layers[-1]
     rho = 1.0

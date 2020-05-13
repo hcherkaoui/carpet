@@ -227,7 +227,8 @@ class ListaBase(torch.nn.Module):
         """ Fit the parameters of the sub-network. """
         with torch.no_grad():
             z = self(x, lbda, output_layer=id_layer)
-            self.training_loss_ = [float(self._loss_fn(x, lbda, z))]
+            prev_loss = self._loss_fn(x, lbda, z)
+            self.training_loss_ = [float(prev_loss)]
         self.norm_grad_ = []
 
         verbose_rate = 50
@@ -268,12 +269,13 @@ class ListaBase(torch.nn.Module):
                 # Compute new possible loss
                 with torch.no_grad():
                     z = self(x, lbda, output_layer=id_layer)
-                    loss_value = float(self._loss_fn(x, lbda, z))
+                    loss_value = self._loss_fn(x, lbda, z)
 
                 # accepting the point
-                if self.training_loss_[-1] > loss_value:
-                    self.training_loss_.append(loss_value)
-                    self.norm_grad_.append(max_norm_grad)
+                if prev_loss > loss_value:
+                    prev_loss = loss_value
+                    self.training_loss_.append(float(loss_value))
+                    self.norm_grad_.append(float(max_norm_grad))
                     lr *= 2**(max_iter_line_search / 4)
                     break
                 # rejecting the point
@@ -321,22 +323,10 @@ class ListaBase(torch.nn.Module):
                 # do a descent step
                 param.data.add_(-lr, param.grad.data)
                 # compute gradient max norm
-                current_norm_grad = float(param.grad.data.cpu().abs().max())
+                current_norm_grad = param.grad.data.abs().max()
                 max_norm_grad = max(max_norm_grad, current_norm_grad)
 
         return max_norm_grad
-
-    def _check_forward_inputs(self, x, output_layer, enable_none=False):
-        """ Format properly the inputs for the 'forward' method. """
-        x_none_ok = (x is None) and enable_none
-        x = x if x_none_ok else check_tensor(x, device=self.device)
-        if output_layer is None:
-            output_layer = self.n_layers
-        elif output_layer > self.n_layers:
-            raise ValueError(f"Requested output from out-of-bound layer "
-                             f"output_layer={output_layer} "
-                             f"(n_layers={self.n_layers})")
-        return x, output_layer
 
     def _tensorized_parameters(self, layer, layer_params):
         """ Transform all the parameters to learnable Tensor"""
