@@ -3,6 +3,7 @@
 # Authors: Thomas Moreau <thomas.moreau@inria.fr>
 # License: BSD (3-clause)
 
+import numbers
 import numpy as np
 import torch
 
@@ -49,7 +50,7 @@ def check_tensor(*arrays, device=None, dtype=torch.float64,
     result = []
     for x in arrays:
         initial_type = type(x)
-        if isinstance(x, np.ndarray) or type(x) in [int, float]:
+        if isinstance(x, np.ndarray) or isinstance(x, numbers.Number):
             x = torch.tensor(x)
         assert isinstance(x, torch.Tensor), (
             f"Invalid type {initial_type} in check_tensor. "
