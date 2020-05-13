@@ -22,7 +22,7 @@ memory = Memory('__cache_dir__', verbose=0)
 
 @memory.cache
 def synthesis_learned_algo(x_train, x_test, A, D, L, lbda, all_n_layers,
-                           type_, verbose=1):
+                           type_, device=None, verbose=1):
     """ NN-algo solver for synthesis TV problem. """
     params = None
 
@@ -37,13 +37,9 @@ def synthesis_learned_algo(x_train, x_test, A, D, L, lbda, all_n_layers,
     for n_layers in all_n_layers:
 
         # declare network
-        if params is not None:
-            algo = LearnTVAlgo(algo_type=type_, A=A, n_layers=n_layers,
-                               max_iter=300, device='cpu',
-                               initial_parameters=params, verbose=0)
-        else:
-            algo = LearnTVAlgo(algo_type=type_, A=A, n_layers=n_layers,
-                               max_iter=300, device='cpu', verbose=0)
+        algo = LearnTVAlgo(algo_type=type_, A=A, n_layers=n_layers,
+                           max_iter=300, device=device,
+                           initial_parameters=params, verbose=verbose)
 
         t0_ = time.time()
         algo.fit(x_train, lbda=lbda)
@@ -64,9 +60,9 @@ def synthesis_learned_algo(x_train, x_test, A, D, L, lbda, all_n_layers,
         test_reg.append(l1_reg(z_test))
 
         if verbose > 0:
-            print(f"[{algo.name}|layers#{n_layers:3d}] model fitted "
-                  f"{delta_:4.1f}s train-loss={train_loss_:.8e} "
-                  f"test-loss={test_loss_:.8e}")
+            print(f"\r[{algo.name}|layers#{n_layers:3d}] model fitted "
+                  f"{delta_:4.1f}s train-loss={train_loss_:.4e} "
+                  f"test-loss={test_loss_:.4e}")
 
     to_return = (np.array(train_loss), np.array(test_loss),
                  np.array(train_reg), np.array(test_reg))
@@ -76,7 +72,7 @@ def synthesis_learned_algo(x_train, x_test, A, D, L, lbda, all_n_layers,
 
 @memory.cache
 def analysis_learned_algo(x_train, x_test, A, D, L, lbda, all_n_layers, type_,
-                          verbose=1):
+                          device=None, verbose=1):
     """ NN-algo solver for analysis TV problem. """
     params = None
 
@@ -93,13 +89,9 @@ def analysis_learned_algo(x_train, x_test, A, D, L, lbda, all_n_layers, type_,
     for n_layers in all_n_layers:
 
         # declare network
-        if params is not None:
-            algo = LearnTVAlgo(algo_type=algo_type, A=A, n_layers=n_layers,
-                               max_iter=300, device='cpu',
-                               initial_parameters=params, verbose=0)
-        else:
-            algo = LearnTVAlgo(algo_type=algo_type, A=A, n_layers=n_layers,
-                               max_iter=300, device='cpu', verbose=0)
+        algo = LearnTVAlgo(algo_type=algo_type, A=A, n_layers=n_layers,
+                           max_iter=300, device=device,
+                           initial_parameters=params, verbose=verbose)
 
         t0_ = time.time()
         if 'untrained' not in type_:
@@ -121,9 +113,9 @@ def analysis_learned_algo(x_train, x_test, A, D, L, lbda, all_n_layers, type_,
         test_reg.append(tv_reg(u_test, D))
 
         if verbose > 0:
-            print(f"[{algo.name}|layers#{n_layers:3d}] model fitted "
-                  f"{delta_:4.1f}s train-loss={train_loss_:.8e} "
-                  f"test-loss={test_loss_:.8e}")
+            print(f"\r[{algo.name}|layers#{n_layers:3d}] model fitted "
+                  f"{delta_:4.1f}s train-loss={train_loss_:.4e} "
+                  f"test-loss={test_loss_:.4e}")
 
     to_return = (np.array(train_loss), np.array(test_loss),
                  np.array(train_reg), np.array(test_reg))
@@ -133,7 +125,7 @@ def analysis_learned_algo(x_train, x_test, A, D, L, lbda, all_n_layers, type_,
 
 @memory.cache
 def analysis_learned_taut_string(x_train, x_test, A, D, L, lbda, all_n_layers,
-                                 type_=None, verbose=1):
+                                 type_=None, device=None, verbose=1):
     """ NN-algo solver for analysis TV problem. """
     params = None
     l_loss = []
@@ -156,8 +148,8 @@ def analysis_learned_taut_string(x_train, x_test, A, D, L, lbda, all_n_layers,
         # Declare network for the given number of layers. Warm-init the first
         # layers with parameters learned with previous networks if any.
         algo = LearnTVAlgo(algo_type='lpgd_taut_string', A=A,
-                           n_layers=n_layers, max_iter=500, device='cpu',
-                           initial_parameters=params, verbose=0)
+                           n_layers=n_layers, max_iter=500, device=device,
+                           initial_parameters=params, verbose=verbose)
 
         # train
         t0_ = time.time()
@@ -175,9 +167,9 @@ def analysis_learned_taut_string(x_train, x_test, A, D, L, lbda, all_n_layers,
         if verbose > 0:
             train_loss = l_loss[n]['train_loss']
             test_loss = l_loss[n]['test_loss']
-            print(f"[{algo.name}|layers#{n_layers:3d}] model fitted "
-                  f"{delta_:4.1f}s train-loss={train_loss:.8e} "
-                  f"test-loss={test_loss:.8e}")
+            print(f"\r[{algo.name}|layers#{n_layers:3d}] model fitted "
+                  f"{delta_:4.1f}s train-loss={train_loss:.4e} "
+                  f"test-loss={test_loss:.4e}")
 
     df = pd.DataFrame(l_loss)
     to_return = (df['train_loss'].values, df['test_loss'].values,
@@ -187,7 +179,7 @@ def analysis_learned_taut_string(x_train, x_test, A, D, L, lbda, all_n_layers,
 
 
 def synthesis_iter_algo(x_train, x_test, A, D, L, lbda, all_n_layers, type_,
-                        verbose=1):
+                        device=None, verbose=1):
     """ Iterative-algo solver for synthesis TV problem. """
     name = 'ISTA' if type_ == 'chambolle' else 'FISTA'
     max_iter = all_n_layers[-1]
@@ -202,25 +194,25 @@ def synthesis_iter_algo(x_train, x_test, A, D, L, lbda, all_n_layers, type_,
     if verbose > 0:
         print("[ISTA iterative] training loss")
     params = dict(
-                grad=lambda z: synthesis_primal_grad(z, A, L, x_train),
-                obj=lambda z: synthesis_primal_obj(z, A, L, x_train, lbda),
-                prox=lambda z, s: pseudo_soft_th_numpy(z, lbda, s),
-                x0=z0_train,  momentum=momentum, restarting=None,
-                max_iter=max_iter, step_size=step_size, early_stopping=False,
-                debug=True, verbose=verbose,
-                )
+        grad=lambda z: synthesis_primal_grad(z, A, L, x_train),
+        obj=lambda z: synthesis_primal_obj(z, A, L, x_train, lbda),
+        prox=lambda z, s: pseudo_soft_th_numpy(z, lbda, s),
+        x0=z0_train,  momentum=momentum, restarting=None,
+        max_iter=max_iter, step_size=step_size, early_stopping=False,
+        debug=True, verbose=verbose,
+    )
     _, saved_z_train, train_loss = fista(**params)
 
     if verbose > 0:
         print("[ISTA iterative] testing loss")
     params = dict(
-                grad=lambda z: synthesis_primal_grad(z, A, L, x_test),
-                obj=lambda z: synthesis_primal_obj(z, A, L, x_test, lbda),
-                prox=lambda z, s: pseudo_soft_th_numpy(z, lbda, s),
-                x0=z0_test,  momentum=momentum, restarting=None,
-                max_iter=max_iter, step_size=step_size, early_stopping=False,
-                debug=True, verbose=verbose,
-                )
+        grad=lambda z: synthesis_primal_grad(z, A, L, x_test),
+        obj=lambda z: synthesis_primal_obj(z, A, L, x_test, lbda),
+        prox=lambda z, s: pseudo_soft_th_numpy(z, lbda, s),
+        x0=z0_test,  momentum=momentum, restarting=None,
+        max_iter=max_iter, step_size=step_size, early_stopping=False,
+        debug=True, verbose=verbose,
+    )
     _, saved_z_test, test_loss = fista(**params)
 
     train_loss = train_loss[[0] + all_n_layers]
@@ -236,13 +228,13 @@ def synthesis_iter_algo(x_train, x_test, A, D, L, lbda, all_n_layers, type_,
 
     if verbose > 0:
         print(f"[{name}] iterations finished "
-              f"train-loss={train_loss[-1]:.8e} test-loss={test_loss[-1]:.8e}")
+              f"train-loss={train_loss[-1]:.4e} test-loss={test_loss[-1]:.4e}")
 
     return train_loss, test_loss, train_reg, test_reg
 
 
 def analysis_primal_iter_algo(x_train, x_test, A, D, L, lbda, all_n_layers,
-                              type_, verbose=1):
+                              type_, device=None, verbose=1):
     """ Iterative-algo solver for synthesis TV problem. """
     name = 'ISTA' if type_ == 'ista' else 'FISTA'
     max_iter = all_n_layers[-1]
@@ -256,25 +248,25 @@ def analysis_primal_iter_algo(x_train, x_test, A, D, L, lbda, all_n_layers,
     if verbose > 0:
         print(f"[analysis {name} iterative] training loss")
     params = dict(
-                grad=lambda z: analysis_primal_grad(z, A, x_train),
-                obj=lambda z: analysis_primal_obj(z, A, D, x_train, lbda),
-                prox=lambda z, s: np.array([tv1_1d(z_, lbda * s) for z_ in z]),
-                x0=u0_train,  momentum=momentum, restarting=None,
-                max_iter=max_iter, step_size=step_size, early_stopping=False,
-                debug=True, verbose=verbose,
-                )
+        grad=lambda z: analysis_primal_grad(z, A, x_train),
+        obj=lambda z: analysis_primal_obj(z, A, D, x_train, lbda),
+        prox=lambda z, s: np.array([tv1_1d(z_, lbda * s) for z_ in z]),
+        x0=u0_train,  momentum=momentum, restarting=None,
+        max_iter=max_iter, step_size=step_size, early_stopping=False,
+        debug=True, verbose=verbose,
+    )
     _, saved_z_train, train_loss = fista(**params)
 
     if verbose > 0:
         print(f"[analysis {name} iterative] testing loss")
     params = dict(
-                grad=lambda z: analysis_primal_grad(z, A, x_test),
-                obj=lambda z: analysis_primal_obj(z, A, D, x_test, lbda),
-                prox=lambda z, s: np.array([tv1_1d(z_, lbda * s) for z_ in z]),
-                x0=u0_test,  momentum=momentum, restarting=None,
-                max_iter=max_iter, step_size=step_size, early_stopping=False,
-                debug=True, verbose=verbose,
-                )
+        grad=lambda z: analysis_primal_grad(z, A, x_test),
+        obj=lambda z: analysis_primal_obj(z, A, D, x_test, lbda),
+        prox=lambda z, s: np.array([tv1_1d(z_, lbda * s) for z_ in z]),
+        x0=u0_test,  momentum=momentum, restarting=None,
+        max_iter=max_iter, step_size=step_size, early_stopping=False,
+        debug=True, verbose=verbose,
+    )
     _, saved_z_test, test_loss = fista(**params)
 
     train_loss = train_loss[[0] + all_n_layers]
@@ -289,14 +281,14 @@ def analysis_primal_iter_algo(x_train, x_test, A, D, L, lbda, all_n_layers,
                          for saved_z_test_ in saved_z_test])
 
     if verbose > 0:
-        print(f"[{name}] iterations finished "
+        print(f"\r[{name}] iterations finished "
               f"train-loss={train_loss[-1]:.6e} test-loss={test_loss[-1]:.6e}")
 
     return train_loss, test_loss, train_reg, test_reg
 
 
 def analysis_dual_iter_algo(x_train, x_test, A, D, L, lbda, all_n_layers,
-                            type_):
+                            type_, device=None, verbose=1):
     """ Chambolle solver for analysis TV problem. """
     inv_A = np.linalg.pinv(A)
     Psi_A = inv_A.dot(D)
@@ -321,21 +313,23 @@ def analysis_dual_iter_algo(x_train, x_test, A, D, L, lbda, all_n_layers,
     name = 'ISTA' if type_ == 'chambolle' else 'FISTA'
 
     print("[ISTA iterative] training loss")
-    params = dict(grad=lambda v: _grad(v, x_train),
-                  obj=lambda v: _obj(v, x_train), prox=_prox,
-                  x0=v0_train, momentum=momentum, restarting=None,
-                  max_iter=max_iter, step_size=step_size, early_stopping=False,
-                  debug=True, verbose=1,
-                  )
+    params = dict(
+        grad=lambda v: _grad(v, x_train),
+        obj=lambda v: _obj(v, x_train), prox=_prox,
+        x0=v0_train, momentum=momentum, restarting=None,
+        max_iter=max_iter, step_size=step_size, early_stopping=False,
+        debug=True, verbose=verbose,
+    )
     _, saved_v_train, train_loss = fista(**params)
 
     print("[ISTA iterative] testing loss")
-    params = dict(grad=lambda v: _grad(v, x_test),
-                  obj=lambda v: _obj(v, x_test), prox=_prox,
-                  x0=v0_test, momentum=momentum, restarting=None,
-                  max_iter=max_iter, step_size=step_size, early_stopping=False,
-                  debug=True, verbose=1,
-                  )
+    params = dict(
+        grad=lambda v: _grad(v, x_test),
+        obj=lambda v: _obj(v, x_test), prox=_prox,
+        x0=v0_test, momentum=momentum, restarting=None,
+        max_iter=max_iter, step_size=step_size, early_stopping=False,
+        debug=True, verbose=verbose
+    )
     _, saved_v_test, test_loss = fista(**params)
 
     train_loss = train_loss[[0] + all_n_layers]
@@ -352,14 +346,15 @@ def analysis_dual_iter_algo(x_train, x_test, A, D, L, lbda, all_n_layers,
     test_reg = np.array([tv_reg(saved_Lz_test_, D)
                          for saved_Lz_test_ in saved_Lz_test])
 
-    print(f"[{name}] iterations finished train-loss={train_loss[-1]:.6e} "
+    print(f"\r[{name}] iterations finished train-loss={train_loss[-1]:.6e} "
           f"test-loss={test_loss[-1]:.6e}")
 
     return train_loss, test_loss, train_reg, test_reg
 
 
 def analysis_primal_dual_iter_algo(x_train, x_test, A, D, L, lbda,
-                                   all_n_layers, type_, verbose=1):
+                                   all_n_layers, type_, device=None,
+                                   verbose=1):
     """ Condat-Vu solver for analysis TV problem. """
     max_iter = all_n_layers[-1]
     rho = 1.0
@@ -374,31 +369,31 @@ def analysis_primal_dual_iter_algo(x_train, x_test, A, D, L, lbda,
     if verbose > 0:
         print("[Condat-Vu iterative] training loss")
     params = dict(
-             grad=lambda Lz: analysis_primal_grad(Lz, A, x_train),
-             obj=lambda Lz: analysis_primal_obj(Lz, A, D, x_train, lbda),
-             prox=lambda u: pseudo_soft_th_numpy(u, lbda, 1.0 / sigma),
-             psi=lambda Lz: Lz.dot(D),
-             adj_psi=lambda v: v.dot(D.T),
-             v0=v0_train,
-             z0=u0_train,
-             lbda=lbda, sigma=sigma, tau=tau, rho=rho, max_iter=max_iter,
-             early_stopping=False, debug=True, verbose=verbose,
-             )
+        grad=lambda Lz: analysis_primal_grad(Lz, A, x_train),
+        obj=lambda Lz: analysis_primal_obj(Lz, A, D, x_train, lbda),
+        prox=lambda u: pseudo_soft_th_numpy(u, lbda, 1.0 / sigma),
+        psi=lambda Lz: Lz.dot(D),
+        adj_psi=lambda v: v.dot(D.T),
+        v0=v0_train,
+        z0=u0_train,
+        lbda=lbda, sigma=sigma, tau=tau, rho=rho, max_iter=max_iter,
+        early_stopping=False, debug=True, verbose=verbose,
+    )
     _, _, saved_Lz_train, _, train_loss = condatvu(**params)
 
     if verbose > 0:
         print("[Condat-Vu iterative] testing loss")
     params = dict(
-             grad=lambda Lz: analysis_primal_grad(Lz, A, x_test),
-             obj=lambda Lz: analysis_primal_obj(Lz, A, D, x_test, lbda),
-             prox=lambda u: pseudo_soft_th_numpy(u, lbda, 1.0 / sigma),
-             psi=lambda Lz: Lz.dot(D),
-             adj_psi=lambda v: v.dot(D.T),
-             v0=v0_test,
-             z0=u0_test,
-             lbda=lbda, sigma=sigma, tau=tau, rho=rho, max_iter=max_iter,
-             early_stopping=False, debug=True, verbose=verbose,
-             )
+        grad=lambda Lz: analysis_primal_grad(Lz, A, x_test),
+        obj=lambda Lz: analysis_primal_obj(Lz, A, D, x_test, lbda),
+        prox=lambda u: pseudo_soft_th_numpy(u, lbda, 1.0 / sigma),
+        psi=lambda Lz: Lz.dot(D),
+        adj_psi=lambda v: v.dot(D.T),
+        v0=v0_test,
+        z0=u0_test,
+        lbda=lbda, sigma=sigma, tau=tau, rho=rho, max_iter=max_iter,
+        early_stopping=False, debug=True, verbose=verbose,
+    )
     _, _, saved_Lz_test, _, test_loss = condatvu(**params)
 
     train_loss = train_loss[[0] + all_n_layers]
@@ -413,7 +408,7 @@ def analysis_primal_dual_iter_algo(x_train, x_test, A, D, L, lbda,
                          for saved_Lz_test_ in saved_Lz_test])
 
     if verbose > 0:
-        print(f"[Condat-Vu] iterations finished "
-              f"train-loss={train_loss[-1]:.8e} test-loss={test_loss[-1]:.8e}")
+        print(f"\r[Condat-Vu] iterations finished "
+              f"train-loss={train_loss[-1]:.4e} test-loss={test_loss[-1]:.4e}")
 
     return train_loss, test_loss, train_reg, test_reg

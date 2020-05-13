@@ -252,12 +252,12 @@ class ListaBase(torch.nn.Module):
                       f"Fitting, step_size={lr:.2e}, "
                       f"iter={i}/{max_iter}, "
                       f"loss={self.training_loss_[-1]:.3e}")
-            else:
+            if self.verbose > 0:
                 p = (id_layer - 1 + i/max_iter) / self.n_layers
                 print(f"\rTraining... {p:7.2%}", end='', flush=True)
 
             # Gradient computation
-            self._update_gradient(x, lbda, id_layer)
+            self._compute_gradient(x, lbda, id_layer)
 
             # Back-tracking line search descent step
             for _ in range(max_iter_line_search):
@@ -302,7 +302,7 @@ class ListaBase(torch.nn.Module):
         msg = "Loss function has increased during training!"
         assert np.all(np.diff(self.training_loss_) < 0.0), msg
 
-    def _update_gradient(self, x, lbda, id_layer):
+    def _compute_gradient(self, x, lbda, id_layer):
         """ Gradient update. """
         # init gradient
         self.zero_grad()
@@ -314,7 +314,6 @@ class ListaBase(torch.nn.Module):
 
     def _update_parameters(self, parameters, lr):
         """ Parameters update step for the gradient descent. """
-        self._saved_gradient = []
         max_norm_grad = 0.0
 
         for param in parameters:
@@ -322,15 +321,10 @@ class ListaBase(torch.nn.Module):
                 # do a descent step
                 param.data.add_(-lr, param.grad.data)
                 # compute gradient max norm
-                current_norm_grad = param.grad.data.detach().abs().max()
-                max_norm_grad = max(max_norm_grad, float(current_norm_grad))
-                # save gradient
-                self._saved_gradient.append(param.grad.data.clone())
-            else:
-                # save gradient
-                self._saved_gradient.append(None)
+                current_norm_grad = float(param.grad.data.cpu().abs().max())
+                max_norm_grad = np.maximum(max_norm_grad, current_norm_grad)
 
-        return float(max_norm_grad)
+        return max_norm_grad
 
     def _check_forward_inputs(self, x, output_layer, enable_none=False):
         """ Format properly the inputs for the 'forward' method. """

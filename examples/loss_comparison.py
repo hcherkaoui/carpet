@@ -24,6 +24,19 @@ def logspace_layers(n_layers=10, max_depth=50):
 
 
 if __name__ == '__main__':
+    import argparse
+    parser = argparse.ArgumentParser(
+        description='Run comparison between the different learned algorithms '
+        'to solve a TV regularized regression.')
+    parser.add_argument('--gpu', type=int, default=None,
+                        help='Use GPU <gpu> to run the computations. If it is '
+                        'not set, use CPU computations.')
+    args = parser.parse_args()
+
+    if args.gpu is not None:
+        device = f"cuda:{args.gpu}"
+    else:
+        device = 'cpu'
 
     print(__doc__)
     print('*' * 80)
@@ -65,7 +78,7 @@ if __name__ == '__main__':
     methods = [  # can be commented in one #
         ('Synthesis LISTA-Original', synthesis_learned_algo, 'origista', 'tab:orange', '*', 'solid'),
         # ('Synthesis LISTA-Coupled', synthesis_learned_algo, 'coupledista', 'tab:orange', '^', 'solid'),
-        ('Synthesis LISTA-Step', synthesis_learned_algo, 'stepista', 'tab:orange', 'o', 'solid'),
+        # ('Synthesis LISTA-Step', synthesis_learned_algo, 'stepista', 'tab:orange', 'o', 'solid'),
         # ('Analysis Condat-Vu-Coupled', analysis_learned_algo, 'coupledcondatvu', 'tab:green', '^', 'solid'),
         ('Analysis learned taut-string', analysis_learned_taut_string, None, 'tab:red', '*', '-.'),
         ('Analysis TV-Original', analysis_learned_algo, 'origtv', 'tab:red', '*', 'solid'),
@@ -90,7 +103,8 @@ if __name__ == '__main__':
             print("-" * 80)
 
             results = func_bench(x_train, x_test, A, D, L, lbda=lbda,
-                                 type_=type_, all_n_layers=all_n_layers)
+                                 type_=type_, all_n_layers=all_n_layers,
+                                 device=device)
             train_loss, test_loss, train_reg, test_reg = results
             l_train_loss.append(train_loss)
             l_test_loss.append(test_loss)
