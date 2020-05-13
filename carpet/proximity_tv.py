@@ -1,7 +1,10 @@
+""" Utils module for examples. """
+# Authors: Thomas Moreau <thomas.moreau@inria.fr>
+# License: BSD (3-clause)
+
 import torch
 import prox_tv
 import numpy as np
-
 from .checks import check_tensor
 from .lista_synthesis import CoupledIstaLASSO
 
@@ -15,16 +18,15 @@ class ProxTV_l1(torch.autograd.Function):
     def forward(ctx, x, lbda):
         # Convert input to numpy array to use the prox_tv library
         device = x.device
-        x = x.data
-        lbda = lbda.data
+        x = x.cpu()
+        lbda = lbda.cpu()
 
         # Get back a tensor for the output and save it for the backward pass
         output = check_tensor(
             np.array([prox_tv.tv1_1d(xx, lbda) for xx in x]),
-            device=device, requires_grad=True
+            device=device, requires_grad=True,
         )
         mask_U = output - torch.functional.F.pad(output, (1, 0))[..., :-1]
-        assert np.allclose(np.diff(output.detach().numpy()), mask_U[:, 1:])
         ctx.save_for_backward(torch.sign(mask_U))
         return output
 
@@ -33,18 +35,18 @@ class ProxTV_l1(torch.autograd.Function):
         """Compute the gradient of proxTV using implicit gradient."""
         batch_size, n_dim = grad_output.shape
         sign_u, = ctx.saved_tensors
+        device = grad_output.device
         S = sign_u != 0
         S[:, 0] = True
         sign_u[:, 0] = 0
-        # do clever computations
-        L = torch.triu(torch.ones((n_dim, n_dim), dtype=torch.float64))
+        # XXX do clever computations
+        L = torch.triu(torch.ones((n_dim, n_dim), dtype=torch.float64,
+                       device=device))
 
-        # import ipdb; ipdb.set_trace()
         grad_x, grad_lbda = [], []
         for i in range(batch_size):
-            L_S = L[:, S[i]]                    # n_dim x |S|
+            L_S = L[:, S[i]]                     # n_dim x |S|
             grad_u = grad_output[i].matmul(L_S)  # 1 x |S|
-
             H_S = torch.inverse(L_S.t().matmul(L_S))
             grad_x.append(grad_u.matmul(H_S.matmul(L_S.t())))
             grad_lbda.append(grad_u.matmul(H_S.matmul(sign_u[i][S[i]])))
@@ -126,7 +128,7 @@ class RegTV(torch.autograd.Function):
 
         prox_x = check_tensor(
             np.array([prox_tv.tv1_1d(xx, eps * mu) for xx in x]),
-            device=device
+            device=device,
         )
         grad_z = (z - prox_x) / eps
         grad_mu = reg.clone()
