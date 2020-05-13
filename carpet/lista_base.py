@@ -323,7 +323,7 @@ class ListaBase(torch.nn.Module):
                 param.data.add_(-lr, param.grad.data)
                 # compute gradient max norm
                 current_norm_grad = param.grad.data.detach().abs().max()
-                max_norm_grad = np.maximum(max_norm_grad, current_norm_grad)
+                max_norm_grad = max(max_norm_grad, float(current_norm_grad))
                 # save gradient
                 self._saved_gradient.append(param.grad.data.clone())
             else:
