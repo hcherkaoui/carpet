@@ -10,7 +10,7 @@ from .lista_synthesis import ListaLASSO
 from .checks import check_tensor
 from .proximity import pseudo_soft_th_tensor
 from .utils import init_vuz, v_to_u
-from .prox_tv import ProxTV_l1
+from .proximity_tv import ProxTV_l1
 
 
 class _ListaAnalysis(ListaBase):

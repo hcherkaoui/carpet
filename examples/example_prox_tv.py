@@ -2,7 +2,7 @@ import torch
 import numpy as np
 import matplotlib.pyplot as plt
 from carpet.checks import check_tensor
-from carpet.prox_tv import ProxTV, RegTV
+from carpet.proximity_tv import ProxTV, RegTV
 
 
 def loss_subgradient(z, c, lmbd):
