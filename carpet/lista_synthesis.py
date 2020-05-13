@@ -36,7 +36,7 @@ class ListaLASSO(_ListaSynthesis):
     )
 
     def __init__(self, A, n_layers, learn_th=True, max_iter=100,
-                 net_solver_type="recursive", initial_parameters=[],
+                 net_solver_type="recursive", initial_parameters=None,
                  name="LISTA", verbose=0, device=None):
 
         n_atoms = A.shape[0]
@@ -99,7 +99,7 @@ class CoupledIstaLASSO(_ListaSynthesis):
     )
 
     def __init__(self, A, n_layers, learn_th=True, max_iter=100,
-                 net_solver_type="recursive", initial_parameters=[],
+                 net_solver_type="recursive", initial_parameters=None,
                  name="Coupled-LISTA", verbose=0, device=None):
 
         n_atoms = A.shape[0]
@@ -158,7 +158,7 @@ class StepIstaLASSO(_ListaSynthesis):
     )
 
     def __init__(self, A, n_layers, learn_th=False, max_iter=100,
-                 net_solver_type='recursive', initial_parameters=[],
+                 net_solver_type='recursive', initial_parameters=None,
                  name="Step-LISTA", verbose=0, device=None):
 
         n_atoms = A.shape[0]
