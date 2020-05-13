@@ -40,7 +40,6 @@ class _ListaSynthesis(ListaBase):
 
     def transform(self, x, lbda, output_layer=None):
         x = check_tensor(x, device=self.device)
-        lbda = check_tensor(lbda, device=self.device)
         with torch.no_grad():
             return self(x, lbda, output_layer=output_layer).cpu().numpy()
 
@@ -74,11 +73,7 @@ class ListaLASSO(_ListaSynthesis):
 
     def forward(self, x, lbda, output_layer=None):
         """ Forward pass of the network. """
-        # check inputs
-        if output_layer > self.n_layers:
-            raise ValueError(f"Requested output from out-of-bound layer "
-                             f"output_layer={output_layer} "
-                             f"(n_layers={self.n_layers})")
+        output_layer = self.check_output_layer(output_layer)
 
         # initialized variables
         _, _, z = init_vuz(self.A, self.D, x, lbda, inv_A=self.inv_A_,
@@ -116,11 +111,7 @@ class CoupledIstaLASSO(_ListaSynthesis):
 
     def forward(self, x, lbda, output_layer=None):
         """ Forward pass of the network. """
-        # check inputs
-        if output_layer > self.n_layers:
-            raise ValueError(f"Requested output from out-of-bound layer "
-                             f"output_layer={output_layer} "
-                             f"(n_layers={self.n_layers})")
+        output_layer = self.check_output_layer(output_layer)
 
         # initialized variables
         _, _, z = init_vuz(self.A, self.D, x, lbda, inv_A=self.inv_A_,
@@ -158,11 +149,7 @@ class StepIstaLASSO(_ListaSynthesis):
 
     def forward(self, x, lbda, output_layer=None):
         """ Forward pass of the network. """
-        # check inputs
-        if output_layer > self.n_layers:
-            raise ValueError(f"Requested output from out-of-bound layer "
-                             f"output_layer={output_layer} "
-                             f"(n_layers={self.n_layers})")
+        output_layer = self.check_output_layer(output_layer)
 
         # initialized variables
         _, _, z = init_vuz(self.A, self.D, x, lbda, inv_A=self.inv_A_,

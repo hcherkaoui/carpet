@@ -336,3 +336,12 @@ class ListaBase(torch.nn.Module):
         for name, p in layer_params.items():
             self.register_parameter("layer{}-{}".format(layer, name), p)
         return layer_params
+
+    def check_output_layer(self, output_layer):
+        if output_layer is None:
+            output_layer = self.n_layers
+        if output_layer > self.n_layers:
+            raise ValueError(f"Requested output from out-of-bound layer "
+                             f"output_layer={output_layer} "
+                             f"(n_layers={self.n_layers})")
+        return output_layer

@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from carpet.datasets import synthetic_1d_dataset
 from carpet.checks import check_random_state
-from utils import (synthesis_learned_algo, analysis_learned_algo,
+from utils import (synthesis_learned_algo, analysis_learned_algo,  # noqa: F401
                    analysis_learned_taut_string, synthesis_iter_algo,
                    analysis_primal_iter_algo, analysis_dual_iter_algo,
                    analysis_primal_dual_iter_algo)
@@ -99,8 +99,8 @@ if __name__ == '__main__':
          'tab:orange', 's', 'dashed'),
         ('Synthesis FISTA-iterative', synthesis_iter_algo, 'fista',
          'tab:orange', 's', 'dashed'),
-        # ('Analysis Condat-Vu-iterative', analysis_primal_dual_iter_algo,None,
-        #  'tab:green', 's', 'dashed'),
+        # ('Analysis Condat-Vu-iterative', analysis_primal_dual_iter_algo,
+        #   None, 'tab:green', 's', 'dashed'),
         # ('Analysis Chamb-iterative', analysis_dual_iter_algo, 'chambolle',
         #  'tab:blue', 's', 'dashed'),
         # ('Analysis  Fast-Chamb-iterative', analysis_dual_iter_algo,
