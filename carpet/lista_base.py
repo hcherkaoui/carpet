@@ -123,9 +123,30 @@ class ListaBase(torch.nn.Module):
             Regularization level for the optimization problem.
         """
         x = check_tensor(x, device=self.device)
-        lbda = float(lbda)
+        lbda = check_tensor(lbda, device=self.device)
         self._fit_all_network_batch_gradient_descent(x, lbda)
         return self
+
+    def transform(self, x, lbda, output_layer=None):
+        """ Compute the output of the network, given x and regularization lbda
+
+        Parameters
+        ----------
+        x : ndarray, shape (n_samples, n_dim)
+            input of the network.
+        lbda: float
+            Regularization level for the optimization problem.
+        output_layer : int (default: None)
+            Layer to output from. It should be smaller than the number of
+            layers of the network. If set to None, output the last layer of the
+            network.
+        """
+        x = check_tensor(x, device=self.device)
+        lbda = check_tensor(lbda, device=self.device)
+        with torch.no_grad():
+            return self(
+                x, lbda, output_layer=output_layer
+            ).detach().cpu().numpy()
 
     def score(self, x, lbda, output_layer=None):
         """ Compute the loss for the network's output
@@ -142,9 +163,11 @@ class ListaBase(torch.nn.Module):
             layer.
         """
         x = check_tensor(x, device=self.device)
+        lbda = check_tensor(lbda, device=self.device)
         with torch.no_grad():
-            return self._loss_fn(x, lbda, self(x, lbda,
-                                 output_layer=output_layer)).cpu().numpy()
+            return self._loss_fn(
+                x, lbda, self(x, lbda, output_layer=output_layer)
+            ).detach().cpu().numpy()
 
     def compute_loss(self, x, lbda):
         """ Compute the loss for the network's output at each layer
@@ -163,23 +186,6 @@ class ListaBase(torch.nn.Module):
                 z = self(x, lbda, output_layer=output_layer + 1)
                 loss.append(self._loss_fn(x, lbda, z).cpu().numpy())
         return np.array(loss)
-
-    def transform(self, x, lbda, output_layer=None):
-        """ Compute the output of the network, given x and regularization lbda
-
-        Parameters
-        ----------
-        x : ndarray, shape (n_samples, n_dim)
-            input of the network.
-        lbda: float
-            Regularization level for the optimization problem.
-        output_layer : int (default: None)
-            Layer to output from. It should be smaller than the number of
-            layers of the network. If set to None, output the last layer of the
-            network.
-        """
-        raise NotImplementedError('ListaBase is a virtual class and should '
-                                  'not be instanciate')
 
     def get_layer_parameters(self, layer):
         """ Initialize the parameters of one layer of the network. """

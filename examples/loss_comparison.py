@@ -34,6 +34,9 @@ if __name__ == '__main__':
     parser.add_argument('--max-iter', type=int, default=300,
                         help='Max number of iterations to train the '
                         'learnable networks.')
+    parser.add_argument('--seed', type=int, default=None,
+                        help='Set the seed for the experiment. Can be used '
+                        'for debug or to freeze experiments.')
     args = parser.parse_args()
 
     if args.gpu is not None:
@@ -65,6 +68,8 @@ if __name__ == '__main__':
     lbda = 1.0
 
     seed = np.random.randint(0, 1000)
+    if args.seed is not None:
+        seed = args.seed
     rng = check_random_state(seed)
     print(f'Seed used = {seed}')  # noqa: E999
 

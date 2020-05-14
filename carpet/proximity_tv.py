@@ -19,7 +19,10 @@ class ProxTV_l1(torch.autograd.Function):
         # Convert input to numpy array to use the prox_tv library
         device = x.device
         x = x.detach().cpu().data
-        lbda = lbda.detach().cpu().data
+
+        # The regularization can be learnable or a float
+        if isinstance(lbda, torch.Tensor):
+            lbda = lbda.detach().cpu().data
 
         # Get back a tensor for the output and save it for the backward pass
         output = check_tensor(
@@ -92,17 +95,17 @@ class RegTV(torch.autograd.Function):
     """
 
     @staticmethod
-    def forward(ctx, loss, z, mu):
-        assert loss.ndim == 1, (
-            "The regularized loss should be of shape (batch_size,). "
+    def forward(ctx, loss, u, lbda):
+        assert loss.ndim == 0, (
+            "The regularized loss should be a scalar. "
             f"Got ndim={loss.ndim}"
         )
 
         # Compute the reg and store the value necessary to compute
         # the gradient. Return the loss.
-        reg = torch.abs(z[:, 1:] - z[:, :-1]).sum(axis=1)
-        ctx.save_for_backward(loss, reg, z, mu)
-        return loss + mu * reg
+        reg = torch.abs(u[:, 1:] - u[:, :-1]).sum()
+        ctx.save_for_backward(loss, reg, u, lbda)
+        return loss + lbda * reg
 
     @staticmethod
     def backward(ctx, grad_output):
@@ -111,25 +114,25 @@ class RegTV(torch.autograd.Function):
         The gradient is derived as the additive update that would be
         used in a proximal gradient descent:
 
-            G(z) = (z - prox(z - eps * nabla(loss)(z), eps*mu))/eps
+            G(u) = (u - prox(u - eps * nabla(loss)(u), eps*lbda))/eps
 
         with a small eps (here hard coded to 1e-10).
         """
-        loss, reg, z, mu = ctx.saved_tensors
+        loss, reg, u, lbda = ctx.saved_tensors
 
-        device = z.device
+        device = u.device
 
         # do clever computations
         eps = 1e-10
-        grad, = torch.autograd.grad(loss, z, only_inputs=True,
+        grad, = torch.autograd.grad(loss, u, only_inputs=True,
                                     retain_graph=True)
-        x = (z - eps * grad).data
-        mu = mu.data
+        x = (u - eps * grad).data
+        lbda = lbda.data
 
         prox_x = check_tensor(
-            np.array([prox_tv.tv1_1d(xx, eps * mu) for xx in x]),
+            np.array([prox_tv.tv1_1d(xx, eps * lbda) for xx in x]),
             device=device,
         )
-        grad_z = (z - prox_x) / eps
-        grad_mu = reg.clone()
-        return (torch.ones(0), grad_z, grad_mu)
+        grad_u = (u - prox_x) / eps
+        grad_lbda = reg.clone()
+        return (torch.ones(0), grad_u, grad_lbda)

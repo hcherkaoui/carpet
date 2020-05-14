@@ -10,50 +10,80 @@ from .lista_synthesis import ListaLASSO
 from .checks import check_tensor
 from .proximity import pseudo_soft_th_tensor
 from .utils import init_vuz, v_to_u
-from .proximity_tv import ProxTV_l1
+from .proximity_tv import ProxTV_l1, RegTV
 
 
 class _ListaAnalysis(ListaBase):
 
-    def transform(self, x, lbda, output_layer=None):
-        x = check_tensor(x, device=self.device)
-        with torch.no_grad():
-            return self(x, lbda, output_layer=output_layer).cpu().numpy()
+    def _loss_fn(self, x, lbda, u):
+        r"""Loss function for the primal.
 
-    def _loss_fn(self, x, lbda, z):
-        """ Target loss function. """
+            :math:`L(u) = 1/2 ||x - Au||_2^2 - lbda ||D u||_1`
+        """
         n_samples = x.shape[0]
-        residual = z.matmul(self.A_) - x
+        residual = u.matmul(self.A_) - x
         loss = 0.5 * (residual * residual).sum()
-        reg = lbda * torch.abs(z[:, 1:] - z[:, :-1]).sum()
+        reg = lbda * torch.abs(u[:, 1:] - u[:, :-1]).sum()
         return (loss + reg) / n_samples
 
 
 class _ListaAnalysisDual(ListaBase):
 
+    def __init__(self, A, n_layers, learn_th=True, max_iter=100,
+                 net_solver_type="recursive", initial_parameters=[],
+                 name=None, verbose=0, device=None):
+
+        if name is None:
+            name = self.default_name
+
+        n_atoms = A.shape[0]
+        self.A = np.array(A)
+        self.D = (np.eye(n_atoms, k=-1) - np.eye(n_atoms, k=0))[:, :-1]
+        inv_A = np.linalg.pinv(self.A)
+
+        self.A_ = check_tensor(self.A, device=device)
+        self.inv_A_ = check_tensor(inv_A, device=device)
+
+        self.Psi_A = inv_A.dot(self.D)
+        self.Psi_AtPsi_A = self.Psi_A.T.dot(self.Psi_A)
+
+        self.Psi_A_ = check_tensor(self.Psi_A, device=device)
+        self.Psi_AtPsi_A_ = check_tensor(self.Psi_AtPsi_A, device=device)
+
+        self.l_ = np.linalg.norm(self.Psi_A, ord=2) ** 2
+
+        super().__init__(n_layers=n_layers, learn_th=learn_th,
+                         max_iter=max_iter, net_solver_type=net_solver_type,
+                         initial_parameters=initial_parameters, name=name,
+                         verbose=verbose, device=device)
+
     def transform(self, x, lbda, output_layer=None):
-        x = check_tensor(x, device=self.device)
-        with torch.no_grad():
-            v = self(x, lbda, output_layer=output_layer).cpu().numpy()
-            return v_to_u(v, x, lbda, A=self.A, D=self.D, device=self.device)
+        v = super().transform(x, lbda, output_layer=output_layer)
+        return v_to_u(v, x, lbda, A=self.A, D=self.D, device=self.device)
 
     def _loss_fn(self, x, lbda, v):
-        """ Target loss function. """
-        n_samples = x.shape[0]
-        if (torch.abs(v) <= lbda).all():
-            residual = v.matmul(self.Psi_A_.t())
-            cost = 0.5 * (residual * residual).sum()
-            cost += torch.diag(- x.matmul(self.Psi_A_).matmul(v.t())).sum()
-            return cost / n_samples
-        else:
+        r"""Loss function for the dual.
+
+            :math:`L(v) = 1/2 ||A^\dagger D v||_2^2 - x A^\dagger D v`
+
+        """
+        # Check feasibility of the point
+        if (torch.abs(v) > lbda).any():
             return torch.tensor([np.inf])
+
+        n_samples = x.shape[0]
+        residual = v.matmul(self.Psi_A_.t())
+        cost = 0.5 * (residual * residual).sum()
+        cost -= (x.matmul(self.Psi_A_) * v.t()).sum()
+        return cost / n_samples
 
 
 class StepSubGradTV(_ListaAnalysis):
-    __doc__ = DOC_LISTA.format(type='learned-TV step',
-                               problem_name='TV',
-                               descr='only learn a step size'
-                               )
+    __doc__ = DOC_LISTA.format(
+        type='learned-TV step',
+        problem_name='TV',
+        descr='only learn a step size'
+    )
 
     def __init__(self, A, n_layers, learn_th=True, max_iter=100,
                  net_solver_type="recursive", initial_parameters=[],
@@ -159,36 +189,14 @@ class ListaTV(_ListaAnalysis):
 
 
 class OrigChambolleTV(_ListaAnalysisDual):
+
+    # Class variables
+    default_name = 'learned-TV Chambolle original'
     __doc__ = DOC_LISTA.format(
-        type='learned-TV Chambolle original',
+        type=default_name,
         problem_name='TV',
         descr='original parametrization from Gregor and Le Cun (2010)'
     )
-
-    def __init__(self, A, n_layers, learn_th=True, max_iter=100,
-                 net_solver_type="recursive", initial_parameters=[],
-                 name="learned-TV Chambolle original", verbose=0, device=None):
-
-        n_atoms = A.shape[0]
-        self.A = np.array(A)
-        self.D = (np.eye(n_atoms, k=-1) - np.eye(n_atoms, k=0))[:, :-1]
-        inv_A = np.linalg.pinv(self.A)
-
-        self.A_ = check_tensor(self.A, device=device)
-        self.inv_A_ = check_tensor(inv_A, device=device)
-
-        self.Psi_A = inv_A.dot(self.D)
-        self.Psi_AtPsi_A = self.Psi_A.T.dot(self.Psi_A)
-
-        self.Psi_A_ = check_tensor(self.Psi_A, device=device)
-        self.Psi_AtPsi_A_ = check_tensor(self.Psi_AtPsi_A, device=device)
-
-        self.l_ = np.linalg.norm(self.Psi_A, ord=2) ** 2
-
-        super().__init__(n_layers=n_layers, learn_th=learn_th,
-                         max_iter=max_iter, net_solver_type=net_solver_type,
-                         initial_parameters=initial_parameters, name=name,
-                         verbose=verbose, device=device)
 
     def get_layer_parameters(self, layer):
         # TODO: this is not n_atom but n_atom - 1. Should be checked
@@ -229,36 +237,14 @@ class OrigChambolleTV(_ListaAnalysisDual):
 
 
 class CoupledChambolleTV(_ListaAnalysisDual):
+
+    # Class variables
+    default_name = "learned-TV Chambolle-Coupled"
     __doc__ = DOC_LISTA.format(
-        type='learned-TV Chambolle-Coupled',
+        type=default_name,
         problem_name='TV',
         descr='one weight parametrization from Chen et al (2018)'
     )
-
-    def __init__(self, A, n_layers, learn_th=True,  max_iter=100,
-                 net_solver_type="recursive", initial_parameters=[],
-                 name="learned-TV Chambolle-Coupled", verbose=0, device=None):
-
-        n_atoms = A.shape[0]
-        self.A = np.array(A)
-        self.D = (np.eye(n_atoms, k=-1) - np.eye(n_atoms, k=0))[:, :-1]
-        inv_A = np.linalg.pinv(self.A)
-
-        self.A_ = check_tensor(self.A, device=device)
-        self.inv_A_ = check_tensor(inv_A, device=device)
-
-        self.Psi_A = inv_A.dot(self.D)
-        self.Psi_AtPsi_A = self.Psi_A.T.dot(self.Psi_A)
-
-        self.Psi_A_ = check_tensor(self.Psi_A, device=device)
-        self.Psi_AtPsi_A_ = check_tensor(self.Psi_AtPsi_A, device=device)
-
-        self.l_ = np.linalg.norm(self.Psi_A, ord=2) ** 2
-
-        super().__init__(n_layers=n_layers, learn_th=learn_th,
-                         max_iter=max_iter, net_solver_type=net_solver_type,
-                         initial_parameters=initial_parameters, name=name,
-                         verbose=verbose, device=device)
 
     def get_layer_parameters(self, layer):
         layer_params = dict()
@@ -288,36 +274,14 @@ class CoupledChambolleTV(_ListaAnalysisDual):
 
 
 class StepChambolleTV(_ListaAnalysisDual):
+
+    # Class variables
+    default_name = "learned-TV Chambolle-Step"
     __doc__ = DOC_LISTA.format(
-        type='learned-TV Chambolle-Step',
+        type=default_name,
         problem_name='TV',
         descr='only learn a step size for the Chambolle dual algorithm',
     )
-
-    def __init__(self, A, n_layers, learn_th=True, max_iter=100,
-                 net_solver_type="recursive", initial_parameters=[],
-                 name="learned-TV Chambolle-Step", verbose=0, device=None):
-
-        n_atoms = A.shape[0]
-        self.A = np.array(A)
-        self.D = (np.eye(n_atoms, k=-1) - np.eye(n_atoms, k=0))[:, :-1]
-        inv_A = np.linalg.pinv(self.A)
-
-        self.A_ = check_tensor(self.A, device=device)
-        self.inv_A_ = check_tensor(inv_A, device=device)
-
-        self.Psi_A = inv_A.dot(self.D)
-        self.Psi_AtPsi_A = self.Psi_A.T.dot(self.Psi_A)
-
-        self.Psi_A_ = check_tensor(self.Psi_A, device=device)
-        self.Psi_AtPsi_A_ = check_tensor(self.Psi_AtPsi_A, device=device)
-
-        self.l_ = np.linalg.norm(self.Psi_A, ord=2) ** 2
-
-        super().__init__(n_layers=n_layers, learn_th=learn_th,
-                         max_iter=max_iter, net_solver_type=net_solver_type,
-                         initial_parameters=initial_parameters, name=name,
-                         verbose=verbose, device=device)
 
     def get_layer_parameters(self, layer):
         layer_params = dict(step_size=1 / self.l_)
@@ -548,3 +512,11 @@ class LpgdTautString(_ListaAnalysis):
             u = ProxTV_l1.apply(u, lbda * mul_lbda)
 
         return u
+
+    def _loss_fn(self, x, lbda, z):
+        """ Target loss function. """
+        n_samples = x.shape[0]
+        residual = z.matmul(self.A_) - x
+        loss = 0.5 * (residual * residual).sum()
+        loss = RegTV.apply(loss, z, lbda)
+        return loss / n_samples

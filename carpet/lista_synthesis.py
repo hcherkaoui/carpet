@@ -38,11 +38,6 @@ class _ListaSynthesis(ListaBase):
                          initial_parameters=initial_parameters, name=name,
                          verbose=verbose, device=device)
 
-    def transform(self, x, lbda, output_layer=None):
-        x = check_tensor(x, device=self.device)
-        with torch.no_grad():
-            return self(x, lbda, output_layer=output_layer).cpu().numpy()
-
     def _loss_fn(self, x, lbda, z):
         """ Target loss function. """
         n_samples = x.shape[0]
