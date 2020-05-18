@@ -31,7 +31,7 @@ class _ListaAnalysis(ListaBase):
 class _ListaAnalysisDual(ListaBase):
 
     def __init__(self, A, n_layers, learn_th=True, max_iter=100,
-                 net_solver_type="recursive", initial_parameters=[],
+                 net_solver_type="recursive", initial_parameters=None,
                  name=None, verbose=0, device=None):
 
         if name is None:
@@ -87,7 +87,7 @@ class StepSubGradTV(_ListaAnalysis):
     )
 
     def __init__(self, A, n_layers, learn_th=True, max_iter=100,
-                 net_solver_type="recursive", initial_parameters=[],
+                 net_solver_type="recursive", initial_parameters=None,
                  name="learned-TV Sub Gradient", verbose=0, device=None):
 
         n_atoms = A.shape[0]
@@ -341,7 +341,7 @@ class CoupledCondatVu(_ListaAnalysis):
     )
 
     def __init__(self, A, n_layers, learn_th=True, max_iter=100,
-                 net_solver_type="recursive", initial_parameters=[],
+                 net_solver_type="recursive", initial_parameters=None,
                  name="learned-Condat-Vu-coupled", verbose=0, device=None):
 
         n_atoms = A.shape[0]
@@ -416,7 +416,7 @@ class StepCondatVu(_ListaAnalysis):
     )
 
     def __init__(self, A, n_layers, learn_th=False, max_iter=100,
-                 net_solver_type="recursive", initial_parameters=[],
+                 net_solver_type="recursive", initial_parameters=None,
                  name="learned-Condat-Vu-step", verbose=0, device=None):
 
         n_atoms = A.shape[0]
