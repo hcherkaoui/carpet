@@ -77,13 +77,13 @@ if __name__ == '__main__':
     # Main experiment
     methods = [  # can be commented in one #
         ('Analysis TV-Original', 'origtv',
-         dict(prox_tv_max_iter=20), 'tab:orange', '', '--'),
-        # ('Analysis TV-Original', 'origtv',
-        #  dict(prox_tv_max_iter=200), 'tab:orange', '', 'solid'),
+         dict(n_inner_layer=20), 'tab:orange', '', '--'),
+        ('Analysis TV-Original', 'origtv',
+         dict(n_inner_layer=200), 'tab:orange', '', 'solid'),
         ('Analysis untrained-TV-Original', 'untrained-origtv',
-         dict(prox_tv_max_iter=20), 'tab:blue', '', '--'),
-        # ('Analysis untrained-TV-Original', 'untrained-origtv',
-        #  dict(prox_tv_max_iter=200), 'tab:blue', '', 'solid'),
+         dict(n_inner_layer=20), 'tab:blue', '', '--'),
+        ('Analysis untrained-TV-Original', 'untrained-origtv',
+         dict(n_inner_layer=200), 'tab:blue', '', 'solid'),
     ]
 
     memory = Memory('__cache_dir__', verbose=0)
@@ -94,13 +94,14 @@ if __name__ == '__main__':
         print("=" * 80)
 
         l_diff_loss = []
-        for name, type_, _, _, _, _ in methods:
+        for name, type_, kwargs, _, _, _ in methods:
             print(f"[main script] running {name}")
             print("-" * 80)
 
             algo_type = 'origtv' if ('untrained' in type_) else type_
             network = LearnTVAlgo(algo_type=algo_type, A=A, n_layers=n_layers,
                                   max_iter=args.max_iter, device=device,
+                                  n_inner_layer=kwargs['n_inner_layer'],
                                   verbose=1)
 
             if 'untrained' not in type_:

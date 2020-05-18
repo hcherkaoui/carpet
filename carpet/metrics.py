@@ -26,7 +26,7 @@ def compute_prox_tv_errors(network, x, lbda):
         """ TV reg. loss function for Numpy variables. """
         n_samples = u.shape[0]
         data_term = 0.5 * np.sum(np.square(u - x))
-        reg = lbda * np.sum(np.abs(np.cumsum(u)))
+        reg = lbda * np.sum(np.abs(np.diff(u)))
         return (data_term + reg) / n_samples
 
     if network.verbose > 0:
@@ -36,7 +36,7 @@ def compute_prox_tv_errors(network, x, lbda):
     x = check_tensor(x, device=network.device)
 
     _, u, _ = init_vuz(network.A, network.D, x, lbda, inv_A=network.inv_A_,
-                       device='cpu')
+                       device=network.device)
 
     l_diff_loss = []
     for layer_params in network.layers_parameters:
@@ -49,15 +49,16 @@ def compute_prox_tv_errors(network, x, lbda):
         # approx prox-tv
         approx_prox_z = network.prox_tv(x=u, lbda=lbda * mul_lbda)
         approx_prox_u = torch.cumsum(approx_prox_z, dim=1)
-        approx_prox_u_npy = approx_prox_u.detach().numpy()
+        approx_prox_u_npy = approx_prox_u.detach().cpu().numpy()
         # true prox-tv
-        u_npy = u.detach().numpy()
+        u_npy = u.detach().cpu().numpy()
         lbda_npy = float(lbda * mul_lbda)
         prox_u_npy = np.array([prox_tv.tv1_1d(u_, lbda_npy) for u_ in u_npy])
         # quantify sub-optimality of the approx-prox
-        diff_loss = (tv_loss(u_npy, approx_prox_u_npy, lbda_npy) -  # approx
-            tv_loss(u_npy, prox_u_npy, lbda_npy)                    # true
-            )
+        diff_loss = (
+            tv_loss(u_npy, approx_prox_u_npy, lbda_npy) -  # approx
+            tv_loss(u_npy, prox_u_npy, lbda_npy)           # true
+        )
         l_diff_loss.append(diff_loss)
         # store feasible point for next iteration
         u = approx_prox_u
