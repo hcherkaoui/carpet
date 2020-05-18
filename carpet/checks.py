@@ -62,3 +62,26 @@ def check_tensor(*arrays, device=None, dtype=torch.float64,
         result.append(x)
 
     return tuple(result) if n_arrays > 1 else result[0]
+
+
+def check_parameter(*arrays, device=None, dtype=torch.float64):
+    """Take input arrays and return parameters with float64 type, on the
+    specified device.
+
+    Parameters
+    ----------
+    arrays: ndarray or Tensor or float
+        Input arrays to convert to torch.Tensor.
+    device: str or None (default: None)
+        Device on which the tensor are created.
+    """
+
+    n_arrays = len(arrays)
+    result = []
+    for x in arrays:
+        if not isinstance(x, torch.nn.Parameter):
+            x = torch.nn.Parameter(check_tensor(x, requires_grad=True))
+        x = x.to(device=device, dtype=dtype)
+        result.append(x)
+
+    return tuple(result) if n_arrays > 1 else result[0]

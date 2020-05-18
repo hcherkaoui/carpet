@@ -56,7 +56,7 @@ class ListaLASSO(_ListaSynthesis):
 
     default_name = "Lista"
 
-    def get_layer_parameters(self, layer):
+    def get_initial_layer_parameters(self, layer_id):
         n_atoms = self.A.shape[0]
         I_k = np.eye(n_atoms)
         layer_params = dict()
@@ -74,7 +74,8 @@ class ListaLASSO(_ListaSynthesis):
         _, _, z = init_vuz(self.A, self.D, x, lbda, inv_A=self.inv_A_,
                            device=self.device)
 
-        for layer_params in self.layers_parameters[:output_layer]:
+        for layer_id in range(output_layer):
+            layer_params = self.parameter_groups[f'layer-{layer_id}']
             # retrieve parameters
             step_size = 1.0 / self.l_
             mul_lbda = layer_params.get('threshold', 1.0)
@@ -97,7 +98,7 @@ class CoupledIstaLASSO(_ListaSynthesis):
 
     default_name = "Coupled-LISTA"
 
-    def get_layer_parameters(self, layer):
+    def get_initial_layer_parameters(self, layer_id):
         layer_params = dict()
         layer_params['W_coupled'] = self.LA.T / self.l_
         if self.learn_th:
@@ -112,7 +113,8 @@ class CoupledIstaLASSO(_ListaSynthesis):
         _, _, z = init_vuz(self.A, self.D, x, lbda, inv_A=self.inv_A_,
                            device=self.device)
 
-        for layer_params in self.layers_parameters[:output_layer]:
+        for layer_id in range(output_layer):
+            layer_params = self.parameter_groups[f'layer-{layer_id}']
             # retrieve parameters
             step_size = 1.0 / self.l_
             mul_lbda = layer_params.get('threshold', 1.0)
@@ -135,7 +137,7 @@ class StepIstaLASSO(_ListaSynthesis):
 
     default_name = "Step-LISTA"
 
-    def get_layer_parameters(self, layer):
+    def get_initial_layer_parameters(self, layer_id):
         """ Initialize the parameters of the network. """
         if self.learn_th:
             print("In StepIstaLASSO learn_th can't be enable, ignore it.")
@@ -150,7 +152,8 @@ class StepIstaLASSO(_ListaSynthesis):
         _, _, z = init_vuz(self.A, self.D, x, lbda, inv_A=self.inv_A_,
                            device=self.device)
 
-        for layer_params in self.layers_parameters[:output_layer]:
+        for layer_id in range(output_layer):
+            layer_params = self.parameter_groups[f'layer-{layer_id}']
             # retrieve parameters
             step_size = layer_params.get('step_size', 1.0)
             W = self.A_.t().matmul(self.L_.t()) * step_size
