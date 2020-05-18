@@ -5,12 +5,13 @@
 
 import torch
 import numpy as np
-from .lista_base import ListaBase, DOC_LISTA
-from .lista_synthesis import ListaLASSO
 from .checks import check_tensor
-from .proximity import pseudo_soft_th_tensor
 from .utils import init_vuz, v_to_u
+from .lista_synthesis import ListaLASSO
 from .proximity_tv import ProxTV_l1, RegTV
+from .proximity import pseudo_soft_th_tensor
+from .lista_base import ListaBase, DOC_LISTA
+from .parameters import ravel_group_params, unravel_group_params
 
 
 class _ListaAnalysis(ListaBase):
@@ -30,7 +31,7 @@ class _ListaAnalysis(ListaBase):
 class _ListaAnalysisDual(ListaBase):
 
     def __init__(self, A, n_layers, learn_th=True, max_iter=100,
-                 net_solver_type="recursive", initial_parameters=[],
+                 net_solver_type="recursive", initial_parameters=None,
                  name=None, verbose=0, device=None):
 
         if name is None:
@@ -86,7 +87,7 @@ class StepSubGradTV(_ListaAnalysis):
     )
 
     def __init__(self, A, n_layers, learn_th=True, max_iter=100,
-                 net_solver_type="recursive", initial_parameters=[],
+                 net_solver_type="recursive", initial_parameters=None,
                  name="learned-TV Sub Gradient", verbose=0, device=None):
 
         n_atoms = A.shape[0]
@@ -105,7 +106,7 @@ class StepSubGradTV(_ListaAnalysis):
                          initial_parameters=initial_parameters, name=name,
                          verbose=verbose, device=device)
 
-    def get_layer_parameters(self, layer):
+    def get_initial_layer_parameters(self, layer_id):
         init_step_size = 1e-10
         return dict(step_size=np.array(init_step_size))
 
@@ -116,7 +117,8 @@ class StepSubGradTV(_ListaAnalysis):
         # initialized variables
         _, u, _ = init_vuz(self.A, self.D, x, lbda, device=self.device)
 
-        for layer_params in self.layers_parameters[:output_layer]:
+        for layer_id in range(output_layer):
+            layer_params = self.parameter_groups[f'layer-{layer_id}']
             # retrieve parameters
             step_size = layer_params['step_size']
 
@@ -136,9 +138,12 @@ class ListaTV(_ListaAnalysis):
         descr='original parametrization from Gregor and Le Cun (2010)'
     )
 
-    def __init__(self, A, n_layers, learn_th=True, max_iter=100,
-                 net_solver_type="recursive", initial_parameters=[],
-                 name="LISTA", verbose=0, device=None):
+    def __init__(self, A, n_layers, initial_parameters=None, learn_th=True,
+                 learn_prox=True, n_inner_layer=500, max_iter=100,
+                 net_solver_type="recursive", name="LPGD-Lista", verbose=0,
+                 device=None):
+        self.n_inner_layer = n_inner_layer
+        self.learn_prox = learn_prox
 
         n_atoms = A.shape[0]
         self.A = np.array(A)
@@ -154,10 +159,24 @@ class ListaTV(_ListaAnalysis):
                          initial_parameters=initial_parameters, name=name,
                          verbose=verbose, device=device)
 
-        self.prox_tv = ListaLASSO(A=self.I_k, n_layers=500, learn_th=True,
-                                  name="Prox-TV-Lista", device=self.device)
+    def get_global_parameters(self, initial_parameters):
+        initial_parameters_prox = unravel_group_params(
+            initial_parameters.get('prox', {})
+        )
 
-    def get_layer_parameters(self, layer):
+        self.prox_tv = ListaLASSO(A=self.I_k, n_layers=self.n_inner_layer,
+                                  learn_th=True, name="Prox-TV-Lista",
+                                  initial_parameters=initial_parameters_prox,
+                                  device=self.device)
+        self._register_parameters(
+            ravel_group_params(self.prox_tv.parameter_groups),
+            group_name='prox'
+        )
+
+        if self.learn_prox:
+            self.force_learn_groups.append('prox')
+
+    def get_initial_layer_parameters(self, layer_id):
         layer_params = dict()
         layer_params['Wu'] = self.I_k - self.A.dot(self.A.T) / self.l_
         layer_params['Wx'] = self.A.T / self.l_
@@ -173,7 +192,8 @@ class ListaTV(_ListaAnalysis):
         _, u, _ = init_vuz(self.A, self.D, x, lbda, inv_A=self.inv_A_,
                            device=self.device)
 
-        for layer_params in self.layers_parameters[:output_layer]:
+        for layer_id in range(output_layer):
+            layer_params = self.parameter_groups[f'layer-{layer_id}']
             # retrieve parameters
             mul_lbda = layer_params.get('threshold', 1.0 / self.l_)
             mul_lbda = check_tensor(mul_lbda, device=self.device)
@@ -198,7 +218,7 @@ class OrigChambolleTV(_ListaAnalysisDual):
         descr='original parametrization from Gregor and Le Cun (2010)'
     )
 
-    def get_layer_parameters(self, layer):
+    def get_initial_layer_parameters(self, layer_id):
         # TODO: this is not n_atom but n_atom - 1. Should be checked
         n_atoms = self.D.shape[1]
         I_k = np.eye(n_atoms)
@@ -221,7 +241,8 @@ class OrigChambolleTV(_ListaAnalysisDual):
         v, _, _ = init_vuz(self.A, self.D, x, lbda, inv_A=self.inv_A_,
                            device=self.device)
 
-        for layer_params in self.layers_parameters[:output_layer]:
+        for layer_id in range(output_layer):
+            layer_params = self.parameter_groups[f'layer-{layer_id}']
             # retrieve parameters
             # mul_lbda = layer_params.get('threshold', 1.0)
             # mul_lbda = check_tensor(mul_lbda)
@@ -246,7 +267,7 @@ class CoupledChambolleTV(_ListaAnalysisDual):
         descr='one weight parametrization from Chen et al (2018)'
     )
 
-    def get_layer_parameters(self, layer):
+    def get_initial_layer_parameters(self, layer_id):
         layer_params = dict()
         layer_params['W_coupled'] = self.Psi_A / self.l_
         # if self.learn_th:
@@ -261,7 +282,8 @@ class CoupledChambolleTV(_ListaAnalysisDual):
         v, _, _ = init_vuz(self.A, self.D, x, lbda, inv_A=self.inv_A_,
                            device=self.device)
 
-        for layer_params in self.layers_parameters[:output_layer]:
+        for layer_id in range(output_layer):
+            layer_params = self.parameter_groups[f'layer-{layer_id}']
             # retrieve parameters
             W = layer_params['W_coupled']
 
@@ -283,7 +305,7 @@ class StepChambolleTV(_ListaAnalysisDual):
         descr='only learn a step size for the Chambolle dual algorithm',
     )
 
-    def get_layer_parameters(self, layer):
+    def get_initial_layer_parameters(self, layer_id):
         layer_params = dict(step_size=1 / self.l_)
         # if self.learn_th:
         #     layer_params['threshold'] = np.array(1.0)
@@ -297,7 +319,8 @@ class StepChambolleTV(_ListaAnalysisDual):
         v, _, _ = init_vuz(self.A, self.D, x, lbda, inv_A=self.inv_A_,
                            device=self.device)
 
-        for layer_params in self.layers_parameters[:output_layer]:
+        for layer_id in range(output_layer):
+            layer_params = self.parameter_groups[f'layer-{layer_id}']
             # retrieve parameters
             step_size = layer_params['step_size']
             W = self.Psi_A_ * step_size
@@ -318,7 +341,7 @@ class CoupledCondatVu(_ListaAnalysis):
     )
 
     def __init__(self, A, n_layers, learn_th=True, max_iter=100,
-                 net_solver_type="recursive", initial_parameters=[],
+                 net_solver_type="recursive", initial_parameters=None,
                  name="learned-Condat-Vu-coupled", verbose=0, device=None):
 
         n_atoms = A.shape[0]
@@ -342,7 +365,7 @@ class CoupledCondatVu(_ListaAnalysis):
                          initial_parameters=initial_parameters, name=name,
                          verbose=verbose, device=device)
 
-    def get_layer_parameters(self, layer):
+    def get_initial_layer_parameters(self, layer_id):
         layer_params = dict(W_coupled=self.D)
         if self.learn_th:
             layer_params['threshold'] = np.array(1.0)
@@ -357,7 +380,8 @@ class CoupledCondatVu(_ListaAnalysis):
                            device=self.device)
         v_old, u_old = v.clone(), u.clone()
 
-        for layer_params in self.layers_parameters[:output_layer]:
+        for layer_id in range(output_layer):
+            layer_params = self.parameter_groups[f'layer-{layer_id}']
             # retrieve parameters
             W = layer_params['W_coupled']
             mul_lbda = layer_params.get('threshold', 1.0)
@@ -392,7 +416,7 @@ class StepCondatVu(_ListaAnalysis):
     )
 
     def __init__(self, A, n_layers, learn_th=False, max_iter=100,
-                 net_solver_type="recursive", initial_parameters=[],
+                 net_solver_type="recursive", initial_parameters=None,
                  name="learned-Condat-Vu-step", verbose=0, device=None):
 
         n_atoms = A.shape[0]
@@ -417,7 +441,7 @@ class StepCondatVu(_ListaAnalysis):
                          initial_parameters=initial_parameters, name=name,
                          verbose=verbose, device=device)
 
-    def get_layer_parameters(self, layer):
+    def get_initial_layer_parameters(self, layer_id):
         return dict(sigma=np.array(.5))
 
     def forward(self, x, lbda, output_layer=None):
@@ -429,7 +453,8 @@ class StepCondatVu(_ListaAnalysis):
                            device=self.device)
         v_old, u_old, _ = init_vuz(self.A, self.D, x, lbda, device=self.device)
 
-        for layer_params in self.layers_parameters[:output_layer]:
+        for layer_id in range(output_layer):
+            layer_params = self.parameter_groups[f'layer-{layer_id}']
             # retrieve parameters
             sigma = layer_params['sigma']
             sigma = torch.clamp(sigma, 0.5, 2.0)  # TODO constraint learning
@@ -484,7 +509,7 @@ class LpgdTautString(_ListaAnalysis):
                          initial_parameters=initial_parameters, name=name,
                          verbose=verbose, device=device)
 
-    def get_layer_parameters(self, layer):
+    def get_initial_layer_parameters(self, layer_id):
         layer_params = dict()
         layer_params['Wu'] = self.I_k - self.A.dot(self.A.T) / self.l_
         layer_params['Wx'] = self.A.T / self.l_
@@ -500,7 +525,8 @@ class LpgdTautString(_ListaAnalysis):
         _, u, _ = init_vuz(self.A, self.D, x, lbda, inv_A=self.inv_A_,
                            device=self.device)
 
-        for layer_params in self.layers_parameters[:output_layer]:
+        for layer_id in range(output_layer):
+            layer_params = self.parameter_groups[f'layer-{layer_id}']
             # retrieve parameters
             mul_lbda = layer_params.get('threshold', 1.0 / self.l_)
             mul_lbda = check_tensor(mul_lbda, device=self.device)

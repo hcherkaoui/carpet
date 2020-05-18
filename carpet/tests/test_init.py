@@ -34,19 +34,23 @@ def test_coherence_init(lbda, seed):
     np.testing.assert_allclose(cost_1, cost_3)
 
 
-@pytest.mark.parametrize('seed', [None])
 @pytest.mark.parametrize('lbda', [0.0, 0.5])
-@pytest.mark.parametrize('n', [1, 50])
+@pytest.mark.parametrize('n', [3, 50])
 @pytest.mark.parametrize('parametrization', ['origista', 'coupledista',
-                                             'stepista'])
-def test_init_parameters(seed, n, lbda, parametrization):
+                                             'stepista', 'origtv'])
+def test_init_parameters(n, lbda, parametrization):
     """ Test the gradient of z. """
-    rng = check_random_state(seed)
+    rng = check_random_state(27)
     x, _, _, L, _, A = synthetic_1d_dataset(n=n, s=0.5, snr=0.0, seed=rng)
-    n_layers = 10
+    n_layers = 5
+
+    # limit the number of inner layers for origtv to avoid long computations
+    kwargs = {}
+    if parametrization == 'origtv':
+        kwargs['n_inner_layer'] = 5
 
     lista_1 = LearnTVAlgo(algo_type=parametrization, A=A, n_layers=n_layers,
-                          max_iter=10)
+                          max_iter=10, net_solver_type='one_shot', **kwargs)
     lista_1.fit(x, lbda=lbda)
     params = lista_1.export_parameters()
 
@@ -58,7 +62,7 @@ def test_init_parameters(seed, n, lbda, parametrization):
     loss_lista_1 = np.array(loss_lista_1)
 
     lista_2 = LearnTVAlgo(algo_type=parametrization, A=A, n_layers=n_layers,
-                          initial_parameters=params, max_iter=10)
+                          initial_parameters=params, max_iter=10, **kwargs)
 
     loss_lista_2 = []
     for n_layer_ in range(n_layers + 1):
