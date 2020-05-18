@@ -39,8 +39,9 @@ def compute_prox_tv_errors(network, x, lbda):
                        device=network.device)
 
     l_diff_loss = []
-    for layer_params in network.layers_parameters:
+    for layer_id in range(network.n_layers):
         # retrieve parameters
+        layer_params = network.parameter_groups[f'layer-{layer_id}']
         mul_lbda = layer_params.get('threshold', 1.0 / network.l_)
         Wx = layer_params['Wx']
         Wu = layer_params['Wu']

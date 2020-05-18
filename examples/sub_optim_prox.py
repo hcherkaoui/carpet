@@ -118,15 +118,14 @@ if __name__ == '__main__':
 
     ###########################################################################
     # Plotting
-    lw = 6
+    lw = 4
     fig, ax = plt.subplots(nrows=1, sharex=True, figsize=(10, 5),
                            num=f"[{__file__}] Prox-TV sub-optimality")
 
     for method, diff_loss in zip(methods, l_diff_loss):
         name, _, _, color, marker, ls = method
-        ax.plot(diff_loss, marker=marker,
-                 color=color, ls=ls, lw=lw, ms=3*lw, label=name)
-    ax.axhline(0.0, color='k', lw=lw/2)
+        ax.semilogy(diff_loss, marker=marker, color=color, ls=ls, lw=lw,
+                    ms=3*lw, label=name)
     ax.legend(bbox_to_anchor=(1.05, 1.0), loc='upper left', borderaxespad=0.0,
               fontsize=12)
     ax.grid()
