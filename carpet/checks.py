@@ -80,8 +80,9 @@ def check_parameter(*arrays, device=None, dtype=torch.float64):
     result = []
     for x in arrays:
         if not isinstance(x, torch.nn.Parameter):
-            x = torch.nn.Parameter(check_tensor(x, requires_grad=True))
-        x = x.to(device=device, dtype=dtype)
+            x = torch.nn.Parameter(check_tensor(
+                x, requires_grad=True, device=device, dtype=dtype
+            ))
         result.append(x)
 
     return tuple(result) if n_arrays > 1 else result[0]
