@@ -27,6 +27,9 @@ if __name__ == '__main__':
     parser.add_argument('--max-iter', type=int, default=300,
                         help='Max number of iterations to train the '
                         'learnable networks.')
+    parser.add_argument('--n-layers', type=int, default=50,
+                        help='Max number of layers to define the '
+                        'learnable networks.')
     parser.add_argument('--seed', type=int, default=None,
                         help='Set the seed for the experiment. Can be used '
                         'for debug or to freeze experiments.')
@@ -42,7 +45,7 @@ if __name__ == '__main__':
 
     t0 = time.time()
 
-    ploting_dir = 'outputs_plots_sub_optimality_comparison'
+    ploting_dir = f'outputs_plots_sub_optimality_comparison_n_layers_{args.n_layers}'
     if not os.path.exists(ploting_dir):
         os.makedirs(ploting_dir)
 
@@ -56,7 +59,7 @@ if __name__ == '__main__':
     n_dim = 5
     s = 0.2
     snr = 0.0
-    n_layers = 50
+    n_layers = args.n_layers
     lbda = 0.5
 
     seed = np.random.randint(0, 1000)
@@ -101,8 +104,7 @@ if __name__ == '__main__':
             algo_type = 'origtv' if ('untrained' in type_) else type_
             network = LearnTVAlgo(algo_type=algo_type, A=A, n_layers=n_layers,
                                   max_iter=args.max_iter, device=device,
-                                  n_inner_layer=kwargs['n_inner_layer'],
-                                  verbose=1)
+                                  verbose=1, **kwargs)
 
             if 'untrained' not in type_:
                 network.fit(x_train, lbda=lbda)
