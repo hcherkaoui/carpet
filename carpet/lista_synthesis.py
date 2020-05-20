@@ -13,6 +13,8 @@ from .utils import init_vuz
 class _ListaSynthesis(ListaBase):
     """Basis class for learn algorithms with synthesis formulation"""
 
+    _output = 'z-synthesis'
+
     def __init__(self, A, n_layers, learn_th=True, max_iter=100,
                  net_solver_type="recursive", initial_parameters=None,
                  name=None, verbose=0, device=None):

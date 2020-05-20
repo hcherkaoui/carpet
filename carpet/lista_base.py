@@ -5,6 +5,7 @@
 
 import torch
 import numpy as np
+from .utils import v_to_u
 from .checks import check_tensor
 from .checks import check_parameter
 from .parameters import list_parameters_from_groups
@@ -134,6 +135,29 @@ class ListaBase(torch.nn.Module):
                 x, lbda, output_layer=output_layer
             ).detach().cpu().numpy()
 
+    def transform_to_u(self, x, lbda, output_layer=None):
+        """Compute the output in primal analysis from given x and lbda
+
+        Parameters
+        ----------
+        x : ndarray, shape (n_samples, n_dim)
+            input of the network.
+        lbda: float
+            Regularization level for the optimization problem.
+        output_layer : int (default: None)
+            Layer to output from. It should be smaller than the number of
+            layers of the network. If set to None, output the last layer of the
+            network
+        """
+        output = self.transform(x, lbda, output_layer=None)
+        if self._output == 'u-analysis':
+            return output
+        if self._output == 'z-synthesis':
+            return np.cumsum(output, axis=-1)
+
+        assert self._output == 'v-analysis_dual'
+        return v_to_u(output, x, lbda, A=self.A, D=self.D)
+
     def score(self, x, lbda, output_layer=None):
         """ Compute the loss for the network's output
 
@@ -197,6 +221,8 @@ class ListaBase(torch.nn.Module):
             max_iters = np.diff(np.linspace(0, self.max_iter, self.n_layers+1,
                                             dtype=int))
             for layer_id, max_iter in zip(layers, max_iters):
+                if max_iter == 0:
+                    continue
                 params = list(self.parameters())  # Get all parameters
                 for group in self.force_learn_groups:
                     assert len(set(self.parameter_groups[group].values())
@@ -208,6 +234,8 @@ class ListaBase(torch.nn.Module):
             max_iters = np.diff(np.linspace(0, self.max_iter, self.n_layers+1,
                                             dtype=int))
             for layer_id, max_iter in zip(layers, max_iters):
+                if max_iter == 0:
+                    continue
                 group_layers = [f'layer-{lid}' for lid in range(layer_id)]
                 params = list_parameters_from_groups(
                     self.parameter_groups,
@@ -226,7 +254,7 @@ class ListaBase(torch.nn.Module):
         return self
 
     def _fit_sub_net_batch_gd(self, x, lbda, params, layer_id, max_iter,
-                              output_layer=None, max_iter_line_search=100,
+                              output_layer=None, max_iter_line_search=50,
                               eps=1.0e-20):
         """ Fit the parameters of the sub-network. """
         if output_layer is None:
@@ -337,6 +365,7 @@ class ListaBase(torch.nn.Module):
     def _register_parameters(self, group_params, group_name):
         """ Transform all the parameters to learnable Tensor"""
         # transform all pre-parameters into learnable torch.nn.Parameters
+
         group_params = {
             k: check_parameter(p, device=self.device)
             for k, p in group_params.items()
