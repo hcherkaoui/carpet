@@ -3,6 +3,7 @@
 # Authors: Thomas Moreau <thomas.moreau@inria.fr>
 # License: BSD (3-clause)
 
+import cProfile
 import torch
 import numpy as np
 from .checks import check_tensor
@@ -61,3 +62,21 @@ def init_vuz(A, D, x, lbda, v0=None, inv_A=None,
         return np.atleast_2d(v0), np.atleast_2d(u0), np.atleast_2d(z0)
     else:
         return v0, u0, z0
+
+
+def profile_me(func):  # pragma: no cover
+    """ Profiling decorator, produce a report <func-name>.profile to be open as
+    Place @profile_me on top of the desired function, then:
+    `python -m snakeviz  <func-name>.profile`
+
+    Parameters
+    ----------
+    func : func, function to profile
+    """
+    def profiled_func(*args, **kwargs):
+        filename = func.__name__ + '.profile'
+        prof = cProfile.Profile()
+        ret = prof.runcall(func, *args, **kwargs)
+        prof.dump_stats(filename)
+        return ret
+    return profiled_func
