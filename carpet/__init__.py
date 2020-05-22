@@ -3,10 +3,10 @@
 # License: BSD (3-clause)
 
 from .lista_synthesis import ListaLASSO, CoupledIstaLASSO, StepIstaLASSO
-from .lista_analysis import (StepSubGradTV, ListaTV, OrigChambolleTV,
-                             CoupledChambolleTV, StepChambolleTV,
-                             CoupledCondatVu, StepCondatVu,
-                             LpgdTautString)
+from .lista_analysis import (StepSubGradTV, ListaTV, CoupledCondatVu,
+                             StepCondatVu, LpgdTautString)
+from .lista_analysis_dual import (OrigChambolleTV, CoupledChambolleTV,
+                                  StepChambolleTV)
 
 __version__ = '0.1.dev0'
 
