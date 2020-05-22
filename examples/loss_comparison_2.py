@@ -134,7 +134,8 @@ def run_experiment(max_iter, max_iter_ref=1000, device=None, seed=None,
         'lpgd_lista': {
             'label': 'Analysis LPGD - LISTA',
             'network': ListaTV,
-            'extra_args': dict(n_inner_layers=100, **learning_parameters),
+            'extra_args': dict(n_inner_layers=100, learn_prox=False,
+                               **learning_parameters),
             'style': dict(color='tab:red', marker='*', linestyle='-')
         },
         'ista_synthesis': {
