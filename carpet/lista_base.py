@@ -56,7 +56,13 @@ class ListaBase(torch.nn.Module):
 
         # network training solver parameters
         self.max_iter = max_iter
+        train_from = (1 if initial_parameters is None
+                      else len(initial_parameters))
+        if ':' in net_solver_type:
+            net_solver_type, train_from = net_solver_type.split(':')
+            assert net_solver_type == 'recursive'
         self.net_solver_type = net_solver_type
+        self.train_from = train_from
 
         # networks meta-parameters
         self.n_layers = n_layers
@@ -210,23 +216,17 @@ class ListaBase(torch.nn.Module):
         """ Fit the parameters of the network. """
         if self.net_solver_type == 'one_shot':
             params = list(self.parameters())  # Get all parameters
-            for group in self.force_learn_groups:
-                assert len(set(self.parameter_groups[group].values())
-                           - set(params)) == 0
             self._fit_sub_net_batch_gd(x, lbda, params, self.n_layers,
                                        self.max_iter)
 
         elif self.net_solver_type == 'recursive':
-            layers = range(1, self.n_layers + 1)
-            max_iters = np.diff(np.linspace(0, self.max_iter, self.n_layers+1,
+            layers = range(self.train_from, self.n_layers + 1)
+            max_iters = np.diff(np.linspace(0, self.max_iter, len(layers) + 1,
                                             dtype=int))
             for layer_id, max_iter in zip(layers, max_iters):
                 if max_iter == 0:
                     continue
                 params = list(self.parameters())  # Get all parameters
-                for group in self.force_learn_groups:
-                    assert len(set(self.parameter_groups[group].values())
-                               - set(params)) == 0
                 self._fit_sub_net_batch_gd(x, lbda, params, layer_id, max_iter)
 
         elif self.net_solver_type == 'greedy':
@@ -254,8 +254,7 @@ class ListaBase(torch.nn.Module):
         return self
 
     def _fit_sub_net_batch_gd(self, x, lbda, params, layer_id, max_iter,
-                              output_layer=None, max_iter_line_search=50,
-                              eps=1.0e-20):
+                              output_layer=None, eps=1e-20):
         """ Fit the parameters of the sub-network. """
         if output_layer is None:
             output_layer = layer_id
@@ -267,7 +266,7 @@ class ListaBase(torch.nn.Module):
 
         verbose_rate = 50
         lr = 1.0
-        is_converged = False
+        is_converged = True
 
         i = 0
 
@@ -294,39 +293,45 @@ class ListaBase(torch.nn.Module):
             # Gradient computation
             self._compute_gradient(x, lbda, output_layer)
 
-            # Back-tracking line search descent step
-            for _ in range(max_iter_line_search):
+            # Compute a gradient step `-lr * grad`
+            self._update_parameters(params, lr=lr)
 
-                # Next gradient step
-                max_norm_grad = self._update_parameters(params, lr=lr)
+            # Back-tracking line search descent step with parameter c = 1/2
+            while lr >= 1e-20:
 
                 # Compute new possible loss
                 with torch.no_grad():
                     z = self(x, lbda, output_layer=output_layer)
                     loss_value = self._loss_fn(x, lbda, z)
 
-                # accepting the point
+                # Accepting the point when the loss decreases
                 if prev_loss > loss_value:
                     prev_loss = loss_value
                     self.training_loss_.append(float(loss_value))
-                    self.norm_grad_.append(float(max_norm_grad))
-                    lr *= 2**(max_iter_line_search / 4)
+                    # Increase the learning rate to make sure we don't have a
+                    # learning rate too low for the next step. Here we chose
+                    # arbitrarily to increase by (1 / c) ** 3. This results
+                    # from a tradeoff between computations at convergence and
+                    # finding a large enough step size.
+                    lr *= 8
                     break
-                # rejecting the point
+                # Rejecting the point and taking c * lr as our new
+                # learning rate.
                 else:
-                    _ = self._update_parameters(params, lr=-lr)  # noqa: F841
+                    # Back track with step `+ (1 - c)lr * grad`
+                    # This overall results with a step `- c * lr * grad`
+                    self._update_parameters(params, lr=-lr/2)
                     lr /= 2.0
+            else:
+                # Stopping criterion lr < 1e-20 was reached
+                break
 
-            # Stopping criterion
-            if lr < 1e-20:
-                is_converged = True
+            # Early stopping when the training loss is not moving anymore
             if len(self.training_loss_) > 1:
                 if self.training_loss_[-2] - self.training_loss_[-1] < eps:
-                    is_converged = True
-
-            # Early stopping
-            if is_converged:
-                break
+                    break
+        else:
+            is_converged = False
 
         if self.verbose:
             converging_status = '' if is_converged else 'not '
