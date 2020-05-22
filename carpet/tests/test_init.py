@@ -47,7 +47,7 @@ def test_init_parameters(n, lbda, parametrization):
     # limit the number of inner layers for origtv to avoid long computations
     kwargs = {}
     if parametrization == 'origtv':
-        kwargs['n_inner_layer'] = 5
+        kwargs['n_inner_layers'] = 5
 
     lista_1 = LearnTVAlgo(algo_type=parametrization, A=A, n_layers=n_layers,
                           max_iter=10, net_solver_type='one_shot', **kwargs)
