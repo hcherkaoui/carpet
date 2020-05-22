@@ -323,7 +323,9 @@ class ListaBase(torch.nn.Module):
                     self._update_parameters(params, lr=-lr/2)
                     lr /= 2.0
             else:
-                # Stopping criterion lr < 1e-20 was reached
+                # Stopping criterion lr < 1e-20 was reached.
+                # Make sure we get back to the parameter at the beginning of
+                # the line search with an extra backtracking step.
                 self._update_parameters(params, lr=-lr)
                 break
 
