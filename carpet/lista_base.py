@@ -324,6 +324,7 @@ class ListaBase(torch.nn.Module):
                     lr /= 2.0
             else:
                 # Stopping criterion lr < 1e-20 was reached
+                self._update_parameters(params, lr=-lr)
                 break
 
             # Early stopping when the training loss is not moving anymore
