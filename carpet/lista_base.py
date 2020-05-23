@@ -81,8 +81,6 @@ class ListaBase(torch.nn.Module):
         if initial_parameters is None:
             initial_parameters = {}
 
-        self.get_global_parameters(initial_parameters)
-
         for layer_id in range(self.n_layers):
             group_name = f'layer-{layer_id}'
             if group_name in initial_parameters.keys():
@@ -92,6 +90,10 @@ class ListaBase(torch.nn.Module):
 
             layer_params = self._register_parameters(layer_params,
                                                      group_name=group_name)
+
+        # Finally get global parameters. This hook can be used to post-process
+        # initial-parameters.
+        self.get_global_parameters(initial_parameters)
 
     def export_parameters(self):
         """ Return a list with all the parameters of the network.

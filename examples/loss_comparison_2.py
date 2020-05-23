@@ -97,6 +97,13 @@ def run_experiment(max_iter, max_iter_ref=1000, device=None, seed=None,
     all_n_layers = logspace_layers(n_layers=10, max_depth=40)
     lbda = 1.0
 
+    from datetime import datetime
+    timestamp = datetime.now()
+
+    print(__doc__)
+    print('*' * 80)
+    print(f"Script started on: {timestamp.strftime('%Y/%m/%d %Hh%M')}")
+
     if seed is None:
         seed = np.random.randint(0, 1000)
     print(f'Seed used = {seed}')
@@ -117,26 +124,41 @@ def run_experiment(max_iter, max_iter_ref=1000, device=None, seed=None,
     learning_parameters = dict(
         net_solver_type=net_solver_type, max_iter=max_iter
     )
+    n_inner_layer = 100
 
     methods = {
-        'lista_synthesis': {
-            'label': 'Synthesis LISTA',
-            'network': CoupledIstaLASSO,
-            'extra_args': dict(**learning_parameters),
-            'style': dict(color='tab:orange', marker='*', linestyle='-')
-        },
+        # 'lista_synthesis': {
+        #     'label': 'Synthesis LISTA',
+        #     'network': CoupledIstaLASSO,
+        #     'extra_args': dict(**learning_parameters),
+        #     'style': dict(color='tab:orange', marker='*', linestyle='-')
+        # },
         'lpgd_taut': {
             'label': 'Analysis LPGD - taut-string',
             'network': LpgdTautString,
             'extra_args': dict(**learning_parameters),
             'style': dict(color='tab:red', marker='*', linestyle='-.')
         },
-        'lpgd_lista': {
-            'label': 'Analysis LPGD - LISTA',
+        'lpgd_ista': {
+            'label': 'Analysis LPGD - ISTA',
             'network': ListaTV,
-            'extra_args': dict(n_inner_layers=100, learn_prox=False,
-                               **learning_parameters),
-            'style': dict(color='tab:red', marker='*', linestyle='-')
+            'extra_args': dict(n_inner_layers=n_inner_layer,
+                               learn_prox='none', **learning_parameters),
+            'style': dict(color='tab:C0', marker='*', linestyle='-')
+        },
+        'lpgd_lista': {
+            'label': 'Analysis LPGD - LISTA[global]',
+            'network': ListaTV,
+            'extra_args': dict(n_inner_layers=n_inner_layer,
+                               learn_prox='global', **learning_parameters),
+            'style': dict(color='tab:C2', marker='*', linestyle='-')
+        },
+        'lpgd_lista_per_layer': {
+            'label': 'Analysis LPGD - LISTA[layer]',
+            'network': ListaTV,
+            'extra_args': dict(n_inner_layers=n_inner_layer,
+                               learn_prox='per-layer', **learning_parameters),
+            'style': dict(color='tab:C3', marker='*', linestyle='-')
         },
         'ista_synthesis': {
             'label': 'Synthesis ISTA',
@@ -193,7 +215,8 @@ def run_experiment(max_iter, max_iter_ref=1000, device=None, seed=None,
     log.extend(results[-1:])
 
     df = pd.DataFrame(log)
-    df.to_pickle(OUTPUT_DIR / f'{SCRIPT_NAME}.pkl')
+    tag = timestamp.strftime('%Y-%m-%d_%Hh%M')
+    df.to_pickle(OUTPUT_DIR / f'{SCRIPT_NAME}_{tag}.pkl')
 
     delta_t = time.strftime("%H h %M min %S s", time.gmtime(time.time() - t0))
     print("=" * 80)
@@ -206,7 +229,8 @@ def run_experiment(max_iter, max_iter_ref=1000, device=None, seed=None,
 def plot_results(filename=None):
 
     if filename is None:
-        filename = OUTPUT_DIR / f'{SCRIPT_NAME}.pkl'
+        all_files = sorted(OUTPUT_DIR.glob('*.pkl'))
+        filename = all_files[-1]
 
     df = pd.read_pickle(filename)
 
@@ -228,6 +252,8 @@ def plot_results(filename=None):
     for method in df['label'].unique():
         this_loss = df.query("label == @method")
         style = this_loss.iloc[0]['style']
+        if ':' in style['color']:
+            style['color'] = style['color'].split(':')[1]
         ticks_layers = this_loss['n_layers']
         train_loss = this_loss.train_loss - c_star
         axis_train.loglog(ticks_layers + 1, train_loss, **style, lw=lw,
@@ -259,7 +285,7 @@ def plot_results(filename=None):
 
     fig.tight_layout()
 
-    filename = OUTPUT_DIR / f"{SCRIPT_NAME}.pdf"
+    filename = filename.with_suffix('.pdf')
     print("Saving plot at '{}'".format(filename))
     fig.savefig(filename, dpi=300)
 
@@ -288,9 +314,6 @@ if __name__ == '__main__':
         device = f"cuda:{args.gpu}"
     else:
         device = 'cpu'
-
-    print(__doc__)
-    print('*' * 80)
 
     # Make sure the output folder exists
     if not OUTPUT_DIR.exists():

@@ -50,8 +50,9 @@ def condatvu(grad, obj, prox, psi, adj_psi, v0, z0, lbda, sigma, tau, rho=1.0,
 
         # printing
         if debug and verbose > 0:
-            print(f"[{name}] Iteration {ii + 1} / {max_iter}, "  # noqa: E999
-                  f"loss = {pobj_[ii]:.6e}, dg = {dg[ii]:.3e},")
+            print(f"\r[{name}] Iteration {ii + 1} / {max_iter}, "  # noqa: E999
+                  f"loss = {pobj_[ii]:.6e}, dg = {dg[ii]:.3e}",
+                  end='', flush=True)
 
         # early-stopping
         if early_stopping and dg[-1] < eps:
@@ -173,14 +174,15 @@ def fista(grad, obj, prox, x0, momentum='fista', restarting=None, max_iter=100,
 
         # verbose at every 50th iterations
         if debug and verbose > 0 and ii % 100:
-            print(f"[{name}] Iteration {100.0 * (ii + 1) / max_iter:.0f}%, "
+            print(f"\r[{name}] Iteration {100.0 * (ii + 1) / max_iter:.0f}%, "
                   f"loss = {pobj_[ii]:.3e}, "
-                  f"grad-norm = {np.linalg.norm(grad_):.3e}")
+                  f"grad-norm = {np.linalg.norm(grad_):.3e}",
+                  end='', flush=True)
 
         # early-stopping on || x_k - x_k-1 || < eps
         if diff_[-1] <= eps and early_stopping:
             if debug:
-                print(f"\n[{name}] early-stopping "
+                print(f"\r[{name}] early-stopping "
                       f"done at {100.0 * (ii + 1) / max_iter:.0f}%, "
                       f"loss = {pobj_[ii]:.3e}, "
                       f"grad-norm = {np.linalg.norm(grad_):.3e}")
