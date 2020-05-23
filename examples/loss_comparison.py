@@ -5,6 +5,7 @@
 # License: BSD (3-clause)
 
 import os
+import shutil
 import time
 import matplotlib.pyplot as plt
 import numpy as np
@@ -53,17 +54,20 @@ if __name__ == '__main__':
     if not os.path.exists(ploting_dir):
         os.makedirs(ploting_dir)
 
+    print("archiving '{0}' under '{1}'".format(__file__, ploting_dir))
+    shutil.copyfile(__file__, os.path.join(ploting_dir, __file__))
+
     ###########################################################################
     # Define variables and data
 
     # Define variables
-    n_samples = 200
-    n_samples_testing = 100
+    n_samples = 6000
+    n_samples_testing = 1000
     n_atoms = 8
     n_dim = 5
     s = 0.2
     snr = 0.0
-    all_n_layers = logspace_layers(n_layers=10, max_depth=40)
+    all_n_layers = logspace_layers(n_layers=5, max_depth=10)
     ticks_layers = np.array([0] + all_n_layers)
     lbda = 1.0
 
@@ -83,36 +87,24 @@ if __name__ == '__main__':
 
     ###########################################################################
     # Main experiment
-    methods = [  # can be commented in one #
-        ('Synthesis LISTA-Original', synthesis_learned_algo, 'origista',
+    methods = [
+        ('Synthesis LISTA', synthesis_learned_algo, 'origista', dict(),
          'tab:orange', '*', 'solid'),
-        # ('Synthesis LISTA-Coupled', synthesis_learned_algo, 'coupledista',
-        #  'tab:orange', '^', 'solid'),
-        # ('Synthesis LISTA-Step', synthesis_learned_algo, 'stepista',
-        #  'tab:orange', 'o', 'solid'),
-        # ('Analysis Condat-Vu-Coupled', analysis_learned_algo,
-        #  'coupledcondatvu', 'tab:green', '^', 'solid'),
-        ('Analysis learned taut-string', analysis_learned_taut_string, None,
-         'tab:red', '*', '-.'),
-        ('Analysis TV-Original', analysis_learned_algo, 'origtv',
+        ('Analysis LPGD - Taut-string', analysis_learned_taut_string, None,
+         dict(), 'tab:red', '*', '-.'),
+        ('Analysis LPGD - Lista [500][not-learn]', analysis_learned_algo,
+         'origtv', dict(learn_prox=False, n_inner_layers=500,
+         net_solver_type='one_shot'), 'tab:red', '^', 'solid'),
+        ('Analysis LPGD - Lista [500][learn]', analysis_learned_algo, 'origtv',
+         dict(learn_prox=True, n_inner_layers=500, net_solver_type='one_shot'),
          'tab:red', '*', 'solid'),
-        # ('Analysis Chamb-Original', analysis_learned_algo, 'origchambolle',
-        #  'tab:blue', '*', 'solid'),
-        # ('Analysis Chamb-Coupled', analysis_learned_algo, 'coupledchambolle',
-        #  'tab:blue', '^', 'solid'),
-        ('Synthesis FISTA-iterative', synthesis_iter_algo, 'ista',
-         'tab:orange', 's', 'dashed'),
-        ('Synthesis FISTA-iterative', synthesis_iter_algo, 'fista',
-         'tab:orange', 's', 'dashed'),
-        # ('Analysis Condat-Vu-iterative', analysis_primal_dual_iter_algo,
-        #   None, 'tab:green', 's', 'dashed'),
-        # ('Analysis Chamb-iterative', analysis_dual_iter_algo, 'chambolle',
-        #  'tab:blue', 's', 'dashed'),
-        # ('Analysis  Fast-Chamb-iterative', analysis_dual_iter_algo,
-        #  'fast-chambolle', 'tab:blue', 's', 'dashed'),
-        ('Analysis ISTA-iterative', analysis_primal_iter_algo, 'ista',
-         'tab:red', 's', 'dashed'),
-        ('Analysis FISTA-iterative', analysis_primal_iter_algo, 'fista',
+        ('Synthesis ISTA', synthesis_iter_algo, 'ista', dict(), 'tab:orange',
+         's', 'dashed'),
+        ('Synthesis FISTA', synthesis_iter_algo, 'fista', dict(), 'tab:orange',
+         's', 'dashed'),
+        ('Analysis ISTA', analysis_primal_iter_algo, 'ista', dict(), 'tab:red',
+         's', 'dashed'),
+        ('Analysis FISTA', analysis_primal_iter_algo, 'fista', dict(),
          'tab:red', 's', 'dashed'),
     ]
 
@@ -121,13 +113,14 @@ if __name__ == '__main__':
         print("=" * 80)
 
         l_train_loss, l_test_loss, l_train_reg, l_test_reg = [], [], [], []
-        for name, func_bench, type_, _, _, _ in methods:
+        for name, func_bench, type_, net_kwargs, _, _, _ in methods:
             print(f"[main script] running {name}")
             print("-" * 80)
 
             results = func_bench(x_train, x_test, A, D, L, lbda=lbda,
                                  type_=type_, all_n_layers=all_n_layers,
-                                 device=device, max_iter=args.max_iter)
+                                 device=device, max_iter=args.max_iter,
+                                 net_kwargs=net_kwargs)
             train_loss, test_loss, train_reg, test_reg = results
             l_train_loss.append(train_loss)
             l_test_loss.append(test_loss)
@@ -160,7 +153,7 @@ if __name__ == '__main__':
     axis_train, axis_test = l_axis
 
     for method, train_loss in zip(methods, l_train_loss):
-        name, _, _, color, marker, ls = method
+        name, _, _, _, color, marker, ls = method
         train_loss -= (min_train_loss - eps_plots)
         axis_train.loglog(ticks_layers + 1, train_loss, marker=marker,
                           color=color, ls=ls, lw=lw, ms=3*lw, label=name)
@@ -173,7 +166,7 @@ if __name__ == '__main__':
     axis_train.set_title(title_, fontsize=18)
 
     for method, test_loss in zip(methods, l_test_loss):
-        name, _, _, color, marker, ls = method
+        name, _, _, _, color, marker, ls = method
         test_loss -= (min_test_loss - eps_plots)
         axis_test.loglog(ticks_layers + 1, test_loss, marker=marker,
                          color=color, ls=ls, lw=lw, ms=3*lw, label=name)
