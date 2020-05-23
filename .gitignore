@@ -17,6 +17,7 @@ dist/
 .cache
 __cache__
 __cache_dir__
+outputs_plots
 build
 .pytest_cache
 __pycache__
