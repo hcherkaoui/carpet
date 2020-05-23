@@ -1,3 +1,7 @@
+""" Parameters utilities management module. """
+# Authors: Hamza Cherkaoui <hamza.cherkaoui@inria.fr>
+# Authors: Thomas Moreau <thomas.moreau@inria.fr>
+# License: BSD (3-clause)
 
 
 def unravel_group_params(unfolded_parameters_group):
