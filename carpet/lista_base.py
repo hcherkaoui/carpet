@@ -212,10 +212,17 @@ class ListaBase(torch.nn.Module):
         """ Initialize the global parameters of the network. """
         pass
 
+    def get_params_to_learn(self, up_to_layer):
+        group_layers = [f'layer-{lid}' for lid in range(up_to_layer)]
+        params = list_parameters_from_groups(
+            self.parameter_groups,
+            self.force_learn_groups + group_layers)
+        return params
+
     def _fit_all_network_batch_gradient_descent(self, x, lbda):
         """ Fit the parameters of the network. """
         if self.net_solver_type == 'one_shot':
-            params = list(self.parameters())  # Get all parameters
+            params = self.get_params_to_learn(up_to_layer=self.n_layers)
             self._fit_sub_net_batch_gd(x, lbda, params, self.n_layers,
                                        self.max_iter)
 
@@ -226,7 +233,7 @@ class ListaBase(torch.nn.Module):
             for layer_id, max_iter in zip(layers, max_iters):
                 if max_iter == 0:
                     continue
-                params = list(self.parameters())  # Get all parameters
+                params = self.get_params_to_learn(up_to_layer=layer_id)
                 self._fit_sub_net_batch_gd(x, lbda, params, layer_id, max_iter)
 
         elif self.net_solver_type == 'greedy':
@@ -236,10 +243,7 @@ class ListaBase(torch.nn.Module):
             for layer_id, max_iter in zip(layers, max_iters):
                 if max_iter == 0:
                     continue
-                group_layers = [f'layer-{lid}' for lid in range(layer_id)]
-                params = list_parameters_from_groups(
-                    self.parameter_groups,
-                    self.force_learn_groups + group_layers)
+                params = self.get_params_to_learn(up_to_layer=layer_id)
                 self._fit_sub_net_batch_gd(x, lbda, params, layer_id, max_iter)
 
         else:
@@ -324,8 +328,8 @@ class ListaBase(torch.nn.Module):
                     lr /= 2.0
             else:
                 # Stopping criterion lr < 1e-20 was reached.
-                # Make sure we get back to the parameter at the beginning of
-                # the line search with an extra backtracking step.
+                # Make sure we get back to the original parameters before the
+                # line search with a full backtracking step.
                 self._update_parameters(params, lr=-lr)
                 break
 
