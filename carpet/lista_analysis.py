@@ -119,12 +119,12 @@ class ListaTV(_ListaAnalysis):
                                   learn_th=True, name="Prox-TV-Lista",
                                   initial_parameters=initial_parameters_prox,
                                   device=self.device)
-        self._register_parameters(
-            ravel_group_params(self.prox_tv.parameter_groups),
-            group_name='prox'
-        )
 
         if self.learn_prox:
+            self._register_parameters(
+                ravel_group_params(self.prox_tv.parameter_groups),
+                group_name='prox'
+            )
             self.force_learn_groups.append('prox')
 
     def get_initial_layer_parameters(self, layer_id):
