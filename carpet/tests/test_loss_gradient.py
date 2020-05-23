@@ -225,4 +225,4 @@ def test_analysis_dual_grad(n, lbda):
     grad_ref = finite_grad(v)
     grad_test = analysis_dual_grad(v, A, D, x, lbda, Psi_A=Psi_A)
 
-    np.testing.assert_allclose(grad_ref, grad_test, atol=1e-5)  # bad precision
+    np.testing.assert_allclose(grad_ref, grad_test, atol=1e-4)  # bad precision
