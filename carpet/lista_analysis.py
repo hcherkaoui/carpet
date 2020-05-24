@@ -49,7 +49,7 @@ class ListaTV(_ListaAnalysis):
     def __init__(self, A, n_layers, initial_parameters=None, learn_th=True,
                  learn_prox=LEARN_PROX_FALSE, use_moreau=False,
                  n_inner_layers=500, max_iter=100, net_solver_type="recursive",
-                 name="LPGD-Lista", verbose=0, device=None):
+                 name=None, verbose=0, device=None):
         self.learn_prox = learn_prox
         self.use_moreau = use_moreau
         self.n_inner_layers = n_inner_layers
@@ -64,6 +64,9 @@ class ListaTV(_ListaAnalysis):
         self.A_ = check_tensor(self.A, device=device)
         self.inv_A_ = torch.pinverse(self.A_)
         self.l_ = np.linalg.norm(self.A, ord=2) ** 2
+
+        if name is None:
+            name = f'LPGD - Lista[{learn_prox}-{n_inner_layers}]'
 
         super().__init__(n_layers=n_layers, learn_th=learn_th,
                          max_iter=max_iter, net_solver_type=net_solver_type,
@@ -182,7 +185,7 @@ class LpgdTautString(_ListaAnalysis):
 
     def __init__(self, A, n_layers, learn_th=False, use_moreau=False,
                  max_iter=100, net_solver_type="recursive",
-                 initial_parameters=None, name="LPGD analysis - Taut-string",
+                 initial_parameters=None, name="LPGD - Taut-string",
                  verbose=0, device=None):
         if device is not None and 'cuda' in device:
             import warnings

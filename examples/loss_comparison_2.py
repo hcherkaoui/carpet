@@ -9,15 +9,18 @@ import time
 import pathlib
 import numpy as np
 import pandas as pd
-from joblib import Memory
+from datetime import datetime
 import matplotlib.pyplot as plt
+
+from joblib import Memory, Parallel, delayed
 
 
 from carpet.utils import init_vuz
 from carpet.datasets import synthetic_1d_dataset
-from carpet import ListaTV, LpgdTautString, CoupledIstaLASSO
-from carpet.iterative_solver import IstaAnalysis, IstaSynthesis
+from carpet.metrics import compute_prox_tv_errors
 from carpet.loss_gradient import analysis_primal_obj, tv_reg
+from carpet import ListaTV, LpgdTautString, CoupledIstaLASSO  # noqa: F401
+from carpet.iterative_solver import IstaAnalysis, IstaSynthesis
 
 
 OUTPUT_DIR = pathlib.Path('outputs_plots')
@@ -38,18 +41,27 @@ def logspace_layers(n_layers=10, max_depth=50):
 # Main experiment runner
 
 @memory.cache(ignore=['verbose', 'device'])
-def run_one(x_train, x_test, A, D, L, lbda, network, all_n_layers,
+def run_one(x_train, x_test, A, D, L, lbda, network, all_n_layers, key,
             extra_args, meta={}, device=None, verbose=1):
     params = None
     log = []
+    print(f"[main script] running {key}")
+    print("-" * 80)
 
     def record_loss(u_train, u_test, n_layers):
+        if isinstance(network, ListaTV):
+            prox_tv_loss_train = compute_prox_tv_errors(network, x_train, lbda)
+            prox_tv_loss_test = compute_prox_tv_errors(network, x_test, lbda)
+        else:
+            prox_tv_loss_train = prox_tv_loss_test = None
         log.append(dict(
-            n_layers=n_layers, **meta,
+            key=key, **meta, extra_args=extra_args, n_layers=n_layers,
             train_loss=analysis_primal_obj(u_train, A, D, x_train, lbda),
             test_loss=analysis_primal_obj(u_test, A, D, x_test, lbda),
             train_reg=tv_reg(u_train, D),
-            test_reg=tv_reg(u_test, D)
+            test_reg=tv_reg(u_test, D),
+            prox_tv_loss_train=prox_tv_loss_train,
+            prox_tv_loss_test=prox_tv_loss_test
         ))
 
     _, u0_train, _ = init_vuz(A, D, x_train, lbda)
@@ -75,8 +87,8 @@ def run_one(x_train, x_test, A, D, L, lbda, network, all_n_layers,
         record_loss(u_train, u_test, n_layers=n_layers)
 
         if verbose > 0:
-            train_loss = log[i]['train_loss']
-            test_loss = log[i]['test_loss']
+            train_loss = log[i+1]['train_loss']
+            test_loss = log[i+1]['test_loss']
             print(f"\r[{algo.name}|layers#{n_layers:3d}] model fitted "
                   f"{delta_:4.1f}s train-loss={train_loss:.4e} "
                   f"test-loss={test_loss:.4e}")
@@ -85,7 +97,7 @@ def run_one(x_train, x_test, A, D, L, lbda, network, all_n_layers,
 
 
 def run_experiment(max_iter, max_iter_ref=1000, device=None, seed=None,
-                   net_solver_type='greedy'):
+                   net_solver_type='recursive', n_jobs=1):
     # Define variables
     n_samples_train = 1000
     n_samples_testing = 1000
@@ -97,7 +109,6 @@ def run_experiment(max_iter, max_iter_ref=1000, device=None, seed=None,
     all_n_layers = logspace_layers(n_layers=10, max_depth=40)
     lbda = 1.0
 
-    from datetime import datetime
     timestamp = datetime.now()
 
     print(__doc__)
@@ -127,38 +138,17 @@ def run_experiment(max_iter, max_iter_ref=1000, device=None, seed=None,
     n_inner_layer = 100
 
     methods = {
-        # 'lista_synthesis': {
-        #     'label': 'Synthesis LISTA',
-        #     'network': CoupledIstaLASSO,
-        #     'extra_args': dict(**learning_parameters),
-        #     'style': dict(color='tab:orange', marker='*', linestyle='-')
-        # },
+        'lista_synthesis': {
+            'label': 'Synthesis LISTA',
+            'network': CoupledIstaLASSO,
+            'extra_args': dict(**learning_parameters),
+            'style': dict(color='tab:orange', marker='*', linestyle='-')
+        },
         'lpgd_taut': {
             'label': 'Analysis LPGD - taut-string',
             'network': LpgdTautString,
             'extra_args': dict(**learning_parameters),
             'style': dict(color='tab:red', marker='*', linestyle='-.')
-        },
-        'lpgd_ista': {
-            'label': 'Analysis LPGD - ISTA',
-            'network': ListaTV,
-            'extra_args': dict(n_inner_layers=n_inner_layer,
-                               learn_prox='none', **learning_parameters),
-            'style': dict(color='tab:C0', marker='*', linestyle='-')
-        },
-        'lpgd_lista': {
-            'label': 'Analysis LPGD - LISTA[global]',
-            'network': ListaTV,
-            'extra_args': dict(n_inner_layers=n_inner_layer,
-                               learn_prox='global', **learning_parameters),
-            'style': dict(color='tab:C2', marker='*', linestyle='-')
-        },
-        'lpgd_lista_per_layer': {
-            'label': 'Analysis LPGD - LISTA[layer]',
-            'network': ListaTV,
-            'extra_args': dict(n_inner_layers=n_inner_layer,
-                               learn_prox='per-layer', **learning_parameters),
-            'style': dict(color='tab:C3', marker='*', linestyle='-')
         },
         'ista_synthesis': {
             'label': 'Synthesis ISTA',
@@ -183,37 +173,50 @@ def run_experiment(max_iter, max_iter_ref=1000, device=None, seed=None,
             'network': IstaAnalysis,
             'extra_args': dict(momentum='fista'),
             'style': dict(color='tab:red', marker='*', linestyle='--')
+        },
+        # reference cost, use all_n_layers to override the computations
+        'reference': {
+            'label': 'Analysis FISTA',
+            'network': IstaAnalysis,
+            'extra_args': dict(momentum='fista'),
+            'style': dict(color='tab:red', marker='*', linestyle='--'),
+            'all_n_layers': [max_iter_ref]
         }
     }
+
+    for i, learn_prox in enumerate(['none', 'global', 'per-layer']):
+        for n_inner_layer, marker in [(10, '*'), (50, 's'), (100, 'h'),
+                                      (300, 'o'), (500, '>')]:
+            methods[f'lpgd_lista_{learn_prox}_{n_inner_layer}'] = {
+                'label': f'LPGD - LISTA[{learn_prox}-{n_inner_layer}]',
+                'network': ListaTV,
+                'extra_args': dict(n_inner_layers=n_inner_layer,
+                                   learn_prox=learn_prox,
+                                   **learning_parameters),
+                'style': dict(color=f'C{i}', marker=marker, linestyle='-')
+            }
 
     # launch all experiments
     print("=" * 80)
     t0 = time.time()
+    results = Parallel(n_jobs=n_jobs)(
+        delayed(run_one)(x_train, x_test, A, D, L, lbda=lbda, key=k,
+                         network=m['network'], extra_args=m['extra_args'],
+                         all_n_layers=m.get('all_n_layers', all_n_layers),
+                         device=device, meta=meta_pb)
+        for k, m in methods.items()
+    )
+
+    # concatenate all results as a big list. Also update style and label
+    # here to avoid recomputing the results when changing the style only.
     log = []
-    for m in methods.values():
-        print(f"[main script] running {m['label']}")
-        print("-" * 80)
+    for records in results:
+        for rec in records:
+            k = rec['key']
+            rec.update(style=methods[k]['style'], label=methods[k]['label'])
+            log.append(rec)
 
-        meta = meta_pb.copy()
-        meta['label'] = m['label']
-        meta['style'] = m['style']
-        results = run_one(x_train, x_test, A, D, L, lbda=lbda,
-                          network=m['network'], extra_args=m['extra_args'],
-                          all_n_layers=all_n_layers, device=device,
-                          meta=meta)
-        log.extend(results)
-
-    # Compute reference cost
-    m = methods['fista_analysis']
-    meta = meta_pb.copy()
-    meta['label'] = 'reference'
-    meta['style'] = None
-    results = run_one(x_train, x_test, A, D, L, lbda=lbda,
-                      network=m['network'], extra_args=m['extra_args'],
-                      all_n_layers=[max_iter_ref], device=device,
-                      meta=meta)
-    log.extend(results[-1:])
-
+    # Save the computations in a pickle file
     df = pd.DataFrame(log)
     tag = timestamp.strftime('%Y-%m-%d_%Hh%M')
     df.to_pickle(OUTPUT_DIR / f'{SCRIPT_NAME}_{tag}.pkl')
@@ -237,10 +240,9 @@ def plot_results(filename=None):
     lw = 4
     eps_plots = 1.0e-20
 
-    ref = df.query("label == 'reference'")
-    df = df.query("label != 'reference'")
-    assert ref.shape[0] == 1, "There should be only one reference"
-    ref = ref.iloc[0]
+    ref = df.query("key == 'reference'")
+    df = df.query("key != 'reference'")
+    ref = ref.loc[ref['n_layers'].idxmax()]
     seed = df.iloc[0]['seed']
 
     fig, l_axis = plt.subplots(nrows=2, sharex=True, figsize=(15, 20),
@@ -300,6 +302,8 @@ if __name__ == '__main__':
     parser.add_argument('--gpu', type=int, default=None,
                         help='Use GPU <gpu> to run the computations. If it is '
                         'not set, use CPU computations.')
+    parser.add_argument('--n-jobs', type=int, default=1,
+                        help='Use <n-jobs> workers to run the computations.')
     parser.add_argument('--max-iter', type=int, default=300,
                         help='Max number of iterations to train the '
                         'learnable networks.')
@@ -321,5 +325,5 @@ if __name__ == '__main__':
 
     if not args.plot:
         run_experiment(max_iter=args.max_iter, device=device, seed=args.seed,
-                       net_solver_type='recursive')
+                       net_solver_type='recursive', n_jobs=args.n_jobs)
     plot_results()

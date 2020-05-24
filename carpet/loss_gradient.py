@@ -82,3 +82,11 @@ def synthesis_primal_obj(z, A, L, x, lbda):
     cost = 0.5 * np.sum(np.square(z.dot(L).dot(A) - x))
     cost += lbda * np.sum(np.abs(z[:, 1:]))
     return cost / n_samples
+
+
+def loss_prox_tv_analysis(x, u, lbda):
+    """ TV reg. loss function for Numpy variables. """
+    n_samples = u.shape[0]
+    data_fit = 0.5 * np.sum(np.square(u - x))
+    reg = lbda * np.sum(np.abs(np.diff(u, axis=-1)))
+    return (data_fit + reg) / n_samples
