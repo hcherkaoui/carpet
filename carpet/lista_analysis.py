@@ -17,6 +17,7 @@ from .parameters import ravel_group_params, unravel_group_params
 LEARN_PROX_PER_LAYER = 'per-layer'
 LEARN_PROX_GLOBAL = 'global'
 LEARN_PROX_FALSE = 'none'
+ALL_LEARN_PROX = [LEARN_PROX_FALSE, LEARN_PROX_GLOBAL, LEARN_PROX_PER_LAYER]
 
 
 class _ListaAnalysis(ListaBase):
@@ -36,60 +37,6 @@ class _ListaAnalysis(ListaBase):
         else:
             loss = loss + lbda * torch.abs(u[:, 1:] - u[:, :-1]).sum()
         return loss / n_samples
-
-
-class StepSubGradTV(_ListaAnalysis):
-    __doc__ = DOC_LISTA.format(
-        type='learned-TV step',
-        problem_name='TV',
-        descr='only learn a step size'
-    )
-
-    def __init__(self, A, n_layers, learn_th=True, use_moreau=False,
-                 max_iter=100, net_solver_type="recursive",
-                 initial_parameters=None, name="learned-TV Sub Gradient",
-                 verbose=0, device=None):
-        self.use_moreau = use_moreau
-
-        n_atoms = A.shape[0]
-        self.A = np.array(A)
-        self.D = (np.eye(n_atoms, k=-1) - np.eye(n_atoms, k=0))[:, :-1]
-
-        self.A_ = check_tensor(self.A, device=device)
-        self.D_ = check_tensor(self.D, device=device)
-        self.inv_A_ = torch.pinverse(self.A_)
-
-        if learn_th:
-            print("In StepSubGradTV learn_th can't be enable, ignore it.")
-
-        super().__init__(n_layers=n_layers, learn_th=False,
-                         max_iter=max_iter, net_solver_type=net_solver_type,
-                         initial_parameters=initial_parameters, name=name,
-                         verbose=verbose, device=device)
-
-    def get_initial_layer_parameters(self, layer_id):
-        init_step_size = 1e-10
-        return dict(step_size=np.array(init_step_size))
-
-    def forward(self, x, lbda, output_layer=None):
-        """ Forward pass of the network. """
-        output_layer = self.check_output_layer(output_layer)
-
-        # initialized variables
-        _, u, _ = init_vuz(self.A, self.D, x, lbda, device=self.device)
-
-        for layer_id in range(output_layer):
-            layer_params = self.parameter_groups[f'layer-{layer_id}']
-            # retrieve parameters
-            step_size = layer_params['step_size']
-
-            # apply one 'iteration'
-            residual = (u.matmul(self.A_) - x).matmul(self.A_.t())
-            reg = u.matmul(self.D_).sign().matmul(self.D_.t())
-            grad = residual + lbda * reg
-            u = u - step_size * grad
-
-        return u
 
 
 class ListaTV(_ListaAnalysis):
@@ -124,57 +71,75 @@ class ListaTV(_ListaAnalysis):
                          verbose=verbose, device=device)
 
     def get_global_parameters(self, initial_parameters):
-        initial_parameters_prox = unravel_group_params(
-            initial_parameters.get('prox', {})
-        )
 
         if self.learn_prox in (LEARN_PROX_GLOBAL, LEARN_PROX_FALSE):
+            initial_parameters_prox = unravel_group_params(
+                initial_parameters.get('prox', {})
+            )
             self.prox_tv = ListaLASSO(
                 A=self.I_k, n_layers=self.n_inner_layers,
                 learn_th=True, name="Prox-TV-Lista",
                 initial_parameters=initial_parameters_prox,
                 device=self.device)
 
-        if self.learn_prox == LEARN_PROX_GLOBAL:
-            self._register_parameters(
-                ravel_group_params(self.prox_tv.parameter_groups),
-                group_name='prox'
-            )
-            self.force_learn_groups.append('prox')
+            if self.learn_prox == LEARN_PROX_GLOBAL:
+                self._register_parameters(
+                    ravel_group_params(self.prox_tv.parameter_groups),
+                    group_name='prox'
+                )
+                self.force_learn_groups.append('prox')
 
-        if self.learn_prox == LEARN_PROX_PER_LAYER:
+        elif self.learn_prox == LEARN_PROX_PER_LAYER:
             # Make sure that all prox have been correctly initialized with
             # initial parameters
             for layer_id in range(self.n_layers):
                 if layer_id in self.prox_tv:
                     continue
-                group_name = f'layer-{layer_id}'
+                layer_params = self.parameter_groups[f'layer-{layer_id}']
                 initial_parameters_prox = unravel_group_params(
-                    {k.split(':', 1)[1]: v
-                     for k, v in self.parameter_groups[group_name].items()
+                    {k.split(':', 1)[1]: v for k, v in layer_params.items()
                      if k.startswith('prox:')}
                 )
-                self.prox_tv[layer_id] = ListaLASSO(
-                    A=self.I_k, n_layers=self.n_inner_layers, learn_th=True,
-                    name=f"Prox-TV-Lista[layer={layer_id}]",
-                    initial_parameters=initial_parameters_prox,
-                    device=self.device
+                self._initialize_prox_tv_per_layer(
+                    layer_id, layer_params, initial_parameters_prox
                 )
+        else:
+            raise NotImplementedError(
+                f"Parameter learn_prox should be in {ALL_LEARN_PROX}. "
+                f"Got '{self.learn_prox}'.")
 
     def get_initial_layer_parameters(self, layer_id):
         layer_params = dict()
         layer_params['Wu'] = self.I_k - self.A.dot(self.A.T) / self.l_
         layer_params['Wx'] = self.A.T / self.l_
+
         if self.learn_th:
             layer_params['threshold'] = np.array(1.0 / self.l_)
+
+        # Only create a network per-layer if learn_prox is LEARN_PROX_PER_LAYER
         if self.learn_prox == LEARN_PROX_PER_LAYER:
-            layer_prox_tv = ListaLASSO(
-                A=self.I_k, n_layers=self.n_inner_layers, learn_th=True,
-                name=f"Prox-TV-Lista[layer={layer_id}]", device=self.device)
-            self.prox_tv[layer_id] = layer_prox_tv
-            for k, p in ravel_group_params(
-                    layer_prox_tv.parameter_groups).items():
-                layer_params[f'prox:{k}'] = p
+            layer_params = self._initialize_prox_tv_per_layer(
+                layer_id, layer_params
+            )
+
+        return layer_params
+
+    def _initialize_prox_tv_per_layer(self, layer_id, layer_params,
+                                      initial_parameters_prox=None):
+        """Create a Lista network to solve the proxTV sub problem.
+
+        Make sure to register correctly its parameter so that the training is
+        done properly for all net_solver_type values.
+        """
+        layer_prox_tv = ListaLASSO(
+            A=self.I_k, n_layers=self.n_inner_layers, learn_th=True,
+            initial_parameters=initial_parameters_prox,
+            name=f"Prox-TV-Lista[layer={layer_id}]", device=self.device
+        )
+        self.prox_tv[layer_id] = layer_prox_tv
+        for k, p in ravel_group_params(
+                layer_prox_tv.parameter_groups).items():
+            layer_params[f'prox:{k}'] = p
         return layer_params
 
     def forward(self, x, lbda, output_layer=None):
@@ -188,19 +153,86 @@ class ListaTV(_ListaAnalysis):
         for layer_id in range(output_layer):
             layer_params = self.parameter_groups[f'layer-{layer_id}']
             # retrieve parameters
-            mul_lbda = layer_params.get('threshold', 1.0 / self.l_)
-            mul_lbda = check_tensor(mul_lbda, device=self.device)
             Wx = layer_params['Wx']
             Wu = layer_params['Wu']
 
-            # apply one 'iteration'
-            u = u.matmul(Wu) + x.matmul(Wx)
+            mul_lbda = layer_params.get('threshold', 1.0 / self.l_)
+            mul_lbda = check_tensor(mul_lbda, device=self.device)
             if self.learn_prox == LEARN_PROX_PER_LAYER:
                 prox_tv = self.prox_tv[layer_id]
             else:
                 prox_tv = self.prox_tv
+
+            # apply one 'iteration'. We need an extra integration step as
+            # prox_tv is a synthesis algorithm which outputs the synthesis
+            # variable z and not the analysis one u.
+            u = u.matmul(Wu) + x.matmul(Wx)
             z = prox_tv(x=u, lbda=lbda * mul_lbda)
             u = torch.cumsum(z, dim=1)
+
+        return u
+
+
+class LpgdTautString(_ListaAnalysis):
+    __doc__ = DOC_LISTA.format(
+        type='learned-PGD with taut-string for prox operator',
+        problem_name='TV',
+        descr='unconstrained parametrization'
+    )
+
+    def __init__(self, A, n_layers, learn_th=False, use_moreau=False,
+                 max_iter=100, net_solver_type="recursive",
+                 initial_parameters=None, name="LPGD analysis - Taut-string",
+                 verbose=0, device=None):
+        if device is not None and 'cuda' in device:
+            import warnings
+            warnings.warn("Cannot use LpgdTautString on cuda device. "
+                          "Falling back to CPU.")
+            device = 'cpu'
+
+        self.use_moreau = use_moreau
+
+        n_atoms = A.shape[0]
+        self.A = np.array(A)
+        self.I_k = np.eye(n_atoms)
+        self.D = (np.eye(n_atoms, k=-1) - np.eye(n_atoms, k=0))[:, :-1]
+
+        self.A_ = check_tensor(self.A, device=device)
+        self.inv_A_ = torch.pinverse(self.A_)
+        self.l_ = np.linalg.norm(self.A, ord=2) ** 2
+
+        super().__init__(n_layers=n_layers, learn_th=learn_th,
+                         max_iter=max_iter, net_solver_type=net_solver_type,
+                         initial_parameters=initial_parameters, name=name,
+                         verbose=verbose, device=device)
+
+    def get_initial_layer_parameters(self, layer_id):
+        layer_params = dict()
+        layer_params['Wu'] = self.I_k - self.A.dot(self.A.T) / self.l_
+        layer_params['Wx'] = self.A.T / self.l_
+        if self.learn_th:
+            layer_params['threshold'] = np.array(1.0 / self.l_)
+        return layer_params
+
+    def forward(self, x, lbda, output_layer=None):
+        """ Forward pass of the network. """
+        output_layer = self.check_output_layer(output_layer)
+
+        # initialized variables
+        _, u, _ = init_vuz(self.A, self.D, x, lbda, inv_A=self.inv_A_,
+                           device=self.device)
+
+        for layer_id in range(output_layer):
+            layer_params = self.parameter_groups[f'layer-{layer_id}']
+            # retrieve parameters
+            Wx = layer_params['Wx']
+            Wu = layer_params['Wu']
+            mul_lbda = layer_params.get('threshold', 1.0 / self.l_)
+            mul_lbda = check_tensor(mul_lbda, device=self.device)
+
+            # apply one 'iteration'
+            u = u.matmul(Wu) + x.matmul(Wx)
+            u = ProxTV_l1.apply(u, lbda * mul_lbda)
 
         return u
 
@@ -355,73 +387,55 @@ class StepCondatVu(_ListaAnalysis):
         return u
 
 
-class LpgdTautString(_ListaAnalysis):
+class StepSubGradTV(_ListaAnalysis):
     __doc__ = DOC_LISTA.format(
-        type='learned-PGD with taut-string for prox operator',
+        type='learned-TV step',
         problem_name='TV',
-        descr='unconstrained parametrization'
+        descr='only learn a step size'
     )
 
-    def __init__(self, A, n_layers, learn_th=False, use_moreau=False,
+    def __init__(self, A, n_layers, learn_th=True, use_moreau=False,
                  max_iter=100, net_solver_type="recursive",
-                 initial_parameters=None, name="LPGD analysis - Taut-string",
+                 initial_parameters=None, name="learned-TV Sub Gradient",
                  verbose=0, device=None):
-        if device is not None and 'cuda' in device:
-            import warnings
-            warnings.warn("Cannot use LpgdTautString on cuda device. "
-                          "Falling back to CPU.")
-            device = 'cpu'
-
         self.use_moreau = use_moreau
 
         n_atoms = A.shape[0]
         self.A = np.array(A)
-        self.I_k = np.eye(n_atoms)
         self.D = (np.eye(n_atoms, k=-1) - np.eye(n_atoms, k=0))[:, :-1]
 
         self.A_ = check_tensor(self.A, device=device)
+        self.D_ = check_tensor(self.D, device=device)
         self.inv_A_ = torch.pinverse(self.A_)
-        self.l_ = np.linalg.norm(self.A, ord=2) ** 2
 
-        super().__init__(n_layers=n_layers, learn_th=learn_th,
+        if learn_th:
+            print("In StepSubGradTV learn_th can't be enable, ignore it.")
+
+        super().__init__(n_layers=n_layers, learn_th=False,
                          max_iter=max_iter, net_solver_type=net_solver_type,
                          initial_parameters=initial_parameters, name=name,
                          verbose=verbose, device=device)
 
     def get_initial_layer_parameters(self, layer_id):
-        layer_params = dict()
-        layer_params['Wu'] = self.I_k - self.A.dot(self.A.T) / self.l_
-        layer_params['Wx'] = self.A.T / self.l_
-        if self.learn_th:
-            layer_params['threshold'] = np.array(1.0 / self.l_)
-        return layer_params
+        init_step_size = 1e-10
+        return dict(step_size=np.array(init_step_size))
 
     def forward(self, x, lbda, output_layer=None):
         """ Forward pass of the network. """
         output_layer = self.check_output_layer(output_layer)
 
         # initialized variables
-        _, u, _ = init_vuz(self.A, self.D, x, lbda, inv_A=self.inv_A_,
-                           device=self.device)
+        _, u, _ = init_vuz(self.A, self.D, x, lbda, device=self.device)
 
         for layer_id in range(output_layer):
             layer_params = self.parameter_groups[f'layer-{layer_id}']
             # retrieve parameters
-            mul_lbda = layer_params.get('threshold', 1.0 / self.l_)
-            mul_lbda = check_tensor(mul_lbda, device=self.device)
-            Wx = layer_params['Wx']
-            Wu = layer_params['Wu']
+            step_size = layer_params['step_size']
 
             # apply one 'iteration'
-            u = u.matmul(Wu) + x.matmul(Wx)
-            u = ProxTV_l1.apply(u, lbda * mul_lbda)
+            residual = (u.matmul(self.A_) - x).matmul(self.A_.t())
+            reg = u.matmul(self.D_).sign().matmul(self.D_.t())
+            grad = residual + lbda * reg
+            u = u - step_size * grad
 
         return u
-
-    def _loss_fn(self, x, lbda, z):
-        """ Target loss function. """
-        n_samples = x.shape[0]
-        residual = z.matmul(self.A_) - x
-        loss = 0.5 * (residual * residual).sum()
-        loss = RegTV.apply(loss, z, lbda)
-        return loss / n_samples
