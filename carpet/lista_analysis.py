@@ -100,9 +100,9 @@ class ListaTV(_ListaAnalysis):
     )
 
     def __init__(self, A, n_layers, initial_parameters=None, learn_th=True,
-                 learn_prox=True, use_moreau=False, n_inner_layers=500,
-                 max_iter=100, net_solver_type="recursive", name="LPGD-Lista",
-                 verbose=0, device=None):
+                 learn_prox=LEARN_PROX_FALSE, use_moreau=False,
+                 n_inner_layers=500, max_iter=100, net_solver_type="recursive",
+                 name="LPGD-Lista", verbose=0, device=None):
         self.learn_prox = learn_prox
         self.use_moreau = use_moreau
         self.n_inner_layers = n_inner_layers
