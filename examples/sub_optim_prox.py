@@ -14,7 +14,6 @@ from carpet import LearnTVAlgo
 from carpet.datasets import synthetic_1d_dataset
 from carpet.checks import check_random_state
 from carpet.metrics import compute_prox_tv_errors
-from utils import analysis_learned_algo
 
 
 if __name__ == '__main__':
@@ -45,7 +44,7 @@ if __name__ == '__main__':
 
     t0 = time.time()
 
-    ploting_dir = f'outputs_plots_sub_optimality_comparison_n_layers_{args.n_layers}'
+    ploting_dir = f'outputs_plots_sub_optim_comp_n_layers_{args.n_layers}'
     if not os.path.exists(ploting_dir):
         os.makedirs(ploting_dir)
 

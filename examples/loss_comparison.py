@@ -94,7 +94,7 @@ if __name__ == '__main__':
          dict(), 'tab:red', '*', '-.'),
         ('Analysis LPGD - Lista [500][not-learn]', analysis_learned_algo,
          'origtv', dict(learn_prox=False, n_inner_layers=500,
-         net_solver_type='one_shot'), 'tab:red', '^', 'solid'),
+          net_solver_type='one_shot'), 'tab:red', '^', 'solid'),
         ('Analysis LPGD - Lista [500][learn]', analysis_learned_algo, 'origtv',
          dict(learn_prox=True, n_inner_layers=500, net_solver_type='one_shot'),
          'tab:red', '*', 'solid'),
