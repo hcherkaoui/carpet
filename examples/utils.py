@@ -22,9 +22,10 @@ memory = Memory('__cache_dir__', verbose=0)
 
 @memory.cache
 def synthesis_learned_algo(x_train, x_test, A, D, L, lbda, all_n_layers,
-                           type_, max_iter=300, device=None, net_kwargs=dict(),
+                           type_, max_iter=300, device=None, net_kwargs=None,
                            verbose=1):
     """ NN-algo solver for synthesis TV problem. """
+    net_kwargs = dict() if net_kwargs is None else net_kwargs
     params = None
 
     _, _, z0_test = init_vuz(A, D, x_test, lbda)
@@ -74,9 +75,10 @@ def synthesis_learned_algo(x_train, x_test, A, D, L, lbda, all_n_layers,
 
 @memory.cache
 def analysis_learned_algo(x_train, x_test, A, D, L, lbda, all_n_layers, type_,
-                          max_iter=300, device=None, net_kwargs=dict(),
+                          max_iter=300, device=None, net_kwargs=None,
                           verbose=1):
     """ NN-algo solver for analysis TV problem. """
+    net_kwargs = dict() if net_kwargs is None else net_kwargs
     params = None
 
     _, u0_train, _ = init_vuz(A, D, x_train, lbda)
@@ -130,8 +132,9 @@ def analysis_learned_algo(x_train, x_test, A, D, L, lbda, all_n_layers, type_,
 @memory.cache
 def analysis_learned_taut_string(x_train, x_test, A, D, L, lbda, all_n_layers,
                                  type_=None, max_iter=300, device=None,
-                                 net_kwargs=dict(), verbose=1):
+                                 net_kwargs=None, verbose=1):
     """ NN-algo solver for analysis TV problem. """
+    net_kwargs = dict() if net_kwargs is None else net_kwargs
     params = None
     l_loss = []
 
@@ -185,9 +188,10 @@ def analysis_learned_taut_string(x_train, x_test, A, D, L, lbda, all_n_layers,
 
 
 def synthesis_iter_algo(x_train, x_test, A, D, L, lbda, all_n_layers, type_,
-                        max_iter=300, device=None, net_kwargs=dict(),
+                        max_iter=300, device=None, net_kwargs=None,
                         verbose=1):
     """ Iterative-algo solver for synthesis TV problem. """
+    net_kwargs = dict() if net_kwargs is None else net_kwargs
     name = 'ISTA' if type_ == 'chambolle' else 'FISTA'
     max_iter = all_n_layers[-1]
     LA = L.dot(A)
@@ -242,8 +246,9 @@ def synthesis_iter_algo(x_train, x_test, A, D, L, lbda, all_n_layers, type_,
 
 def analysis_primal_iter_algo(x_train, x_test, A, D, L, lbda, all_n_layers,
                               type_, max_iter=300, device=None,
-                              net_kwargs=dict(), verbose=1):
+                              net_kwargs=None, verbose=1):
     """ Iterative-algo solver for synthesis TV problem. """
+    net_kwargs = dict() if net_kwargs is None else net_kwargs
     name = 'ISTA' if type_ == 'ista' else 'FISTA'
     max_iter = all_n_layers[-1]
     step_size = 1.0 / np.linalg.norm(A, ord=2) ** 2
@@ -297,8 +302,9 @@ def analysis_primal_iter_algo(x_train, x_test, A, D, L, lbda, all_n_layers,
 
 def analysis_dual_iter_algo(x_train, x_test, A, D, L, lbda, all_n_layers,
                             type_, max_iter=300, device=None,
-                            net_kwargs=dict(), verbose=1):
+                            net_kwargs=None, verbose=1):
     """ Chambolle solver for analysis TV problem. """
+    net_kwargs = dict() if net_kwargs is None else net_kwargs
     inv_A = np.linalg.pinv(A)
     Psi_A = inv_A.dot(D)
 
@@ -363,8 +369,9 @@ def analysis_dual_iter_algo(x_train, x_test, A, D, L, lbda, all_n_layers,
 
 def analysis_primal_dual_iter_algo(x_train, x_test, A, D, L, lbda,
                                    all_n_layers, type_, max_iter=300,
-                                   device=None, net_kwargs=dict(), verbose=1):
+                                   device=None, net_kwargs=None, verbose=1):
     """ Condat-Vu solver for analysis TV problem. """
+    net_kwargs = dict() if net_kwargs is None else net_kwargs
     max_iter = all_n_layers[-1]
     rho = 1.0
     sigma = 0.5
