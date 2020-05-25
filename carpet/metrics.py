@@ -6,32 +6,25 @@
 import warnings
 import torch
 import numpy as np
-import prox_tv
+from prox_tv import tv1_1d
+
 from .utils import init_vuz
 from .checks import check_tensor
 from .lista_analysis import ListaTV
+from .lista_analysis import LEARN_PROX_PER_LAYER
+from .loss_gradient import loss_prox_tv_analysis
 
 
 def compute_prox_tv_errors(network, x, lbda):
-    """ Returnt the sub-optimality gap of the prox-tv at each iteration. """
+    """Return the sub-optimality gap of the prox-tv at each iteration.
+    """
 
-    if not isinstance(network, (ListaTV)):
-        raise ValueError("network should be {'ListaTV',}")
+    if not isinstance(network, ListaTV):
+        raise ValueError("network should be of type {'ListaTV'}.")
 
     if not hasattr(network, 'training_loss_'):
-        warnings.warn("network seems to not have been trained "
-                      "training_loss_ attribute missing")
-
-    def tv_loss(x, u, lbda):
-        """ TV reg. loss function for Numpy variables. """
-        n_samples = u.shape[0]
-        data_term = 0.5 * np.sum(np.square(u - x))
-        reg = lbda * np.sum(np.abs(np.diff(u)))
-        return (data_term + reg) / n_samples
-
-    if network.verbose > 0:
-        warnings.warn("For convenience network verbose force to 0.")
-        network.verbose = 0
+        warnings.warn("network has not been trained before computing "
+                      "prox_tv_errors.")
 
     x = check_tensor(x, device=network.device)
 
@@ -40,28 +33,38 @@ def compute_prox_tv_errors(network, x, lbda):
 
     l_diff_loss = []
     for layer_id in range(network.n_layers):
-        # retrieve parameters
         layer_params = network.parameter_groups[f'layer-{layer_id}']
-        mul_lbda = layer_params.get('threshold', 1.0 / network.l_)
+
+        # retrieve parameters
         Wx = layer_params['Wx']
         Wu = layer_params['Wu']
+
+        # Get the correct prox depending on the layer_id and learn_prox
+        mul_lbda = layer_params.get('threshold', 1.0 / network.l_)
+        if network.learn_prox == LEARN_PROX_PER_LAYER:
+            prox_tv = network.prox_tv[layer_id]
+        else:
+            prox_tv = network.prox_tv
+
         # apply one 'iteration'
-        u = u.matmul(Wu) + x.matmul(Wx)
-        # approx prox-tv
-        approx_prox_z = network.prox_tv(x=u, lbda=lbda * mul_lbda)
-        approx_prox_u = torch.cumsum(approx_prox_z, dim=1)
-        approx_prox_u_npy = approx_prox_u.detach().cpu().numpy()
-        # true prox-tv
-        u_npy = u.detach().cpu().numpy()
+        u_half = u.matmul(Wu) + x.matmul(Wx)
+        u_half_npy = u_half.detach().cpu().numpy()
+
+        # prox-tv as applied by the network
+        z_k = prox_tv(u_half, lbda * mul_lbda)
+        u = torch.cumsum(z_k, dim=1)
+        approx_prox_u_npy = u.detach().cpu().numpy()
+
+        # exact prox-tv with taut-string algorithm
         lbda_npy = float(lbda * mul_lbda)
-        prox_u_npy = np.array([prox_tv.tv1_1d(u_, lbda_npy) for u_ in u_npy])
-        # quantify sub-optimality of the approx-prox
+        prox_u_npy = np.array([tv1_1d(u_, lbda_npy)
+                               for u_ in u_half_npy])
+
+        # log sub-optimality of the prox applied by the network
         diff_loss = (
-            tv_loss(u_npy, approx_prox_u_npy, lbda_npy) -  # approx
-            tv_loss(u_npy, prox_u_npy, lbda_npy)           # true
+            loss_prox_tv_analysis(u_half_npy, approx_prox_u_npy, lbda_npy) -
+            loss_prox_tv_analysis(u_half_npy, prox_u_npy, lbda_npy)
         )
         l_diff_loss.append(diff_loss)
-        # store feasible point for next iteration
-        u = approx_prox_u
 
     return l_diff_loss
