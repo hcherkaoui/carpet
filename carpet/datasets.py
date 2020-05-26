@@ -111,6 +111,10 @@ def synthetic_1d_dataset(n_atoms=10, n_dim=20, A=None, n=1000, s=0.1, snr=1.0,
     x, u, z = np.c_[x], np.c_[u], np.c_[z]
 
     # lbda_max = 1.0 for each sample
-    x /= np.max(np.abs(x.dot(A.T).dot(L.T)), axis=1, keepdims=True)
+    S = A.sum(axis=0)
+    c = (x.dot(S) / (S ** 2).sum())[:, None] * np.ones(z.shape)
+    lmbd_max = np.abs((x - c.dot(A)).dot(A.T).dot(L.T))
+    lmbd_max = lmbd_max.max(axis=1, keepdims=True)
+    x /= lmbd_max
 
     return x, u, z, L, D, A
