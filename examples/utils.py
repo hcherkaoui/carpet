@@ -12,7 +12,7 @@ from carpet import LearnTVAlgo
 from carpet.utils import init_vuz, v_to_u
 from carpet.loss_gradient import (analysis_primal_obj, analysis_primal_grad,
                                   analysis_dual_grad, synthesis_primal_grad,
-                                  synthesis_primal_obj, analysis_dual_obj)
+                                  synthesis_primal_obj)
 from carpet.optimization import fista, condatvu
 from carpet.proximity import _soft_th_numpy, pseudo_soft_th_numpy
 
@@ -287,8 +287,6 @@ def analysis_dual_iter_algo(x_train, x_test, A, D, L, lbda, all_n_layers,
     def _obj(v, x):
         v = np.atleast_2d(v)
         u = v_to_u(v, x, A=A, D=D, inv_AtA=inv_AtA)
-        # print(f"\nprimal loss : {analysis_primal_obj(u, A, D, x, lbda):.6f} "
-        #       f"| neg dual loss : {-analysis_dual_obj(v, A, D, x, lbda):.6f}")
         return analysis_primal_obj(u, A, D, x, lbda)
 
     def _prox(v, step_size):

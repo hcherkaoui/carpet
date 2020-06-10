@@ -18,14 +18,14 @@ mpl.rcParams['xtick.labelsize'] = 18
 mpl.rcParams['ytick.labelsize'] = 18
 mpl.rcParams['axes.labelsize'] = 18
 
-import matplotlib.pyplot as plt
-import numpy as np
-from carpet.datasets import synthetic_1d_dataset
-from carpet.checks import check_random_state
-from utils import (synthesis_learned_algo, analysis_learned_algo,  # noqa: F401
-                   analysis_learned_taut_string, synthesis_iter_algo,
-                   analysis_primal_iter_algo, analysis_dual_iter_algo,
-                   analysis_primal_dual_iter_algo)
+import matplotlib.pyplot as plt  # noqa: E402
+import numpy as np  # noqa: E402
+from carpet.datasets import synthetic_1d_dataset  # noqa: E402
+from carpet.checks import check_random_state  # noqa: E402
+from utils import (synthesis_learned_algo,  # noqa: F401, E402
+                   analysis_learned_algo, analysis_learned_taut_string,
+                   synthesis_iter_algo, analysis_primal_iter_algo,
+                   analysis_dual_iter_algo, analysis_primal_dual_iter_algo)
 
 
 def logspace_layers(n_layers=10, max_depth=50):
@@ -100,11 +100,11 @@ if __name__ == '__main__':
     # Main experiment
     methods = [
         ('Synthesis primal PGD', synthesis_iter_algo, 'ista', dict(),
-        'tab:blue', 's', 'dashed'),
+         'tab:blue', 's', 'dashed'),
         ('Synthesis primal APGD', synthesis_iter_algo, 'fista', dict(),
-        'tab:blue', 's', 'solid'),
+         'tab:blue', 's', 'solid'),
         ('Analysis primal PGD', analysis_primal_iter_algo, 'ista', dict(),
-        'tab:orange', 's', 'dashed'),
+         'tab:orange', 's', 'dashed'),
         ('Analysis primal APGD', analysis_primal_iter_algo, 'fista', dict(),
          'tab:orange', 's', 'solid'),
         ('Analysis dual PGD', analysis_dual_iter_algo, 'ista', dict(),
@@ -112,7 +112,7 @@ if __name__ == '__main__':
         ('Analysis dual APGD', analysis_dual_iter_algo, 'fista', dict(),
          'tab:red', 's', 'solid'),
         ('Analysis primal-dual GD', analysis_primal_dual_iter_algo, 'fista',
-        dict(), 'tab:olive', 's', 'solid'),
+         dict(), 'tab:olive', 's', 'solid'),
     ]
 
     def run_experiment(methods, x_train, x_test, L, lbda, all_n_layers):
@@ -145,11 +145,11 @@ if __name__ == '__main__':
     lw = 5
     eps_plots = 1.0e-20
     print("[Reference] computing minimum reference loss...")
+    ref_n_layers = [int(args.iter_mult * args.max_iter)]
     t0_ref_ = time.time()
     results = analysis_primal_iter_algo(x_train, x_test, A, D, L,
-        lbda=args.temp_reg, type_='fista',
-        all_n_layers=[int(args.iter_mult * args.max_iter)], verbose=0
-        )
+                                        lbda=args.temp_reg, type_='fista',
+                                        all_n_layers=ref_n_layers, verbose=0)
     ref_train_loss, ref_test_loss = results
     min_train_loss, min_test_loss = ref_train_loss[-1], ref_test_loss[-1]
     print(f"[Reference] ({time.time() - t0_ref_:.1f}s) "
