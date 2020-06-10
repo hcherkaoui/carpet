@@ -15,20 +15,20 @@ def test_coherence_init(lbda, seed):
     x, _, _, L, D, A = synthetic_1d_dataset()
 
     v0 = None
-    v0, u0, z0 = init_vuz(A, D, x, lbda, v0=v0)
+    v0, u0, z0 = init_vuz(A, D, x, v0=v0)
     cost_1 = synthesis_primal_obj(z0, A, L, x, lbda)
     cost_2 = analysis_primal_obj(u0, A, D, x, lbda)
-    cost_3 = analysis_primal_obj(v_to_u(v0, x, lbda, A, D), A, D, x, lbda)
+    cost_3 = analysis_primal_obj(v_to_u(v0, x, A, D), A, D, x, lbda)
 
     np.testing.assert_allclose(cost_1, cost_2)
     np.testing.assert_allclose(cost_1, cost_3)
 
     v0 = rng.randn(*v0.shape)
-    v0, u0, z0 = init_vuz(A, D, x, lbda, v0=v0)
+    v0, u0, z0 = init_vuz(A, D, x, v0=v0)
     synthesis_primal_obj(z0, A, L, x, lbda)
     cost_1 = synthesis_primal_obj(z0, A, L, x, lbda)
     cost_2 = analysis_primal_obj(u0, A, D, x, lbda)
-    cost_3 = analysis_primal_obj(v_to_u(v0, x, lbda, A, D), A, D, x, lbda)
+    cost_3 = analysis_primal_obj(v_to_u(v0, x, A, D), A, D, x, lbda)
 
     np.testing.assert_allclose(cost_1, cost_2)
     np.testing.assert_allclose(cost_1, cost_3)

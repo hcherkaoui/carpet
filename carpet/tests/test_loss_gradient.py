@@ -23,7 +23,7 @@ def test_coherence_synthesis_loss(parametrization, lbda, n):
     algorithms. """
     rng = check_random_state(None)
     x, _, _, L, D, A = synthetic_1d_dataset(n=n, s=0.5, snr=0.0, seed=rng)
-    _, _, z = init_vuz(A, D, x, lbda)
+    _, _, z = init_vuz(A, D, x)
     z_ = check_tensor(z, device='cpu')
 
     cost = synthesis_primal_obj(z, A, L, x, lbda)
@@ -44,7 +44,7 @@ def test_coherence_analysis_loss(parametrization, lbda, n):
     algorithms. """
     rng = check_random_state(None)
     x, _, _, _, D, A = synthetic_1d_dataset(n=n, s=0.5, snr=0.0, seed=rng)
-    _, _, z = init_vuz(A, D, x, lbda)
+    _, _, z = init_vuz(A, D, x)
     z_ = check_tensor(z, device='cpu')
 
     cost = analysis_primal_obj(z, A, D, x, lbda=lbda)
@@ -65,7 +65,7 @@ def test_coherence_training_synthesis_loss(parametrization, lbda, n):
     rng = check_random_state(None)
     x, _, _, L, D, A = synthetic_1d_dataset(n=n, s=0.5, snr=0.0, seed=rng)
 
-    _, _, z0 = init_vuz(A, D, x, lbda)
+    _, _, z0 = init_vuz(A, D, x)
     train_loss = [synthesis_primal_obj(z0, A, L, x, lbda)]
     train_loss_ = [synthesis_primal_obj(z0, A, L, x, lbda)]
 
@@ -91,7 +91,7 @@ def test_coherence_training_analysis_loss(parametrization, lbda, n):
     rng = check_random_state(None)
     x, _, _, _, D, A = synthetic_1d_dataset(n=n, s=0.5, snr=0.0, seed=rng)
 
-    _, u0, _ = init_vuz(A, D, x, lbda)
+    _, u0, _ = init_vuz(A, D, x)
     train_loss = [analysis_primal_obj(u0, A, D, x, lbda)]
     train_loss_ = [analysis_primal_obj(u0, A, D, x, lbda)]
 
@@ -223,6 +223,6 @@ def test_analysis_dual_grad(n, lbda):
         return grad.reshape(n, v_dim)
 
     grad_ref = finite_grad(v)
-    grad_test = analysis_dual_grad(v, A, D, x, lbda, Psi_A=Psi_A)
+    grad_test = analysis_dual_grad(v, A, D, x, Psi_A=Psi_A)
 
     np.testing.assert_allclose(grad_ref, grad_test, atol=1e-4)  # bad precision

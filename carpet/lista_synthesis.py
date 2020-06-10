@@ -74,7 +74,7 @@ class ListaLASSO(_ListaSynthesis):
         output_layer = self.check_output_layer(output_layer)
 
         # initialized variables
-        _, _, z = init_vuz(self.A, self.D, x, lbda, inv_A=self.inv_A_,
+        _, _, z = init_vuz(self.A, self.D, x, inv_A=self.inv_A_,
                            device=self.device)
 
         for layer_id in range(output_layer):
@@ -114,7 +114,7 @@ class CoupledIstaLASSO(_ListaSynthesis):
         output_layer = self.check_output_layer(output_layer)
 
         # initialized variables
-        _, _, z = init_vuz(self.A, self.D, x, lbda, inv_A=self.inv_A_,
+        _, _, z = init_vuz(self.A, self.D, x, inv_A=self.inv_A_,
                            device=self.device)
 
         for layer_id in range(output_layer):
@@ -154,7 +154,7 @@ class StepIstaLASSO(_ListaSynthesis):
         output_layer = self.check_output_layer(output_layer)
 
         # initialized variables
-        _, _, z = init_vuz(self.A, self.D, x, lbda, inv_A=self.inv_A_,
+        _, _, z = init_vuz(self.A, self.D, x, inv_A=self.inv_A_,
                            device=self.device)
 
         for layer_id in range(output_layer):

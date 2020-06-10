@@ -73,7 +73,7 @@ class IstaSynthesis(_IterativeSolver):
         if output_layer is None:
             output_layer = self.n_layers
 
-        _, _, z0 = init_vuz(self.A, self.D, x, lbda)
+        _, _, z0 = init_vuz(self.A, self.D, x)
 
         params = dict(
             grad=lambda z: synthesis_primal_grad(z, self.A, self.L, x),
@@ -111,7 +111,7 @@ class IstaAnalysis(_IterativeSolver):
         if output_layer is None:
             output_layer = self.n_layers
 
-        _, u0, _ = init_vuz(self.A, self.D, x, lbda)
+        _, u0, _ = init_vuz(self.A, self.D, x)
 
         params = dict(
             grad=lambda z: analysis_primal_grad(z, self.A, x),

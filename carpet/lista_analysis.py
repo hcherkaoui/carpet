@@ -150,7 +150,7 @@ class ListaTV(_ListaAnalysis):
         output_layer = self.check_output_layer(output_layer)
 
         # initialized variables
-        _, u, _ = init_vuz(self.A, self.D, x, lbda, inv_A=self.inv_A_,
+        _, u, _ = init_vuz(self.A, self.D, x, inv_A=self.inv_A_,
                            device=self.device)
 
         for layer_id in range(output_layer):
@@ -222,7 +222,7 @@ class LpgdTautString(_ListaAnalysis):
         output_layer = self.check_output_layer(output_layer)
 
         # initialized variables
-        _, u, _ = init_vuz(self.A, self.D, x, lbda, inv_A=self.inv_A_,
+        _, u, _ = init_vuz(self.A, self.D, x, inv_A=self.inv_A_,
                            device=self.device)
 
         for layer_id in range(output_layer):
@@ -285,7 +285,7 @@ class CoupledCondatVu(_ListaAnalysis):
         output_layer = self.check_output_layer(output_layer)
 
         # initialized variables
-        v, u, _ = init_vuz(self.A, self.D, x, lbda, inv_A=self.inv_A_,
+        v, u, _ = init_vuz(self.A, self.D, x, inv_A=self.inv_A_,
                            device=self.device)
         v_old, u_old = v.clone(), u.clone()
 
@@ -360,9 +360,9 @@ class StepCondatVu(_ListaAnalysis):
         output_layer = self.check_output_layer(output_layer)
 
         # initialized variables
-        v, u, _ = init_vuz(self.A, self.D, x, lbda, inv_A=self.inv_A_,
+        v, u, _ = init_vuz(self.A, self.D, x, inv_A=self.inv_A_,
                            device=self.device)
-        v_old, u_old, _ = init_vuz(self.A, self.D, x, lbda, device=self.device)
+        v_old, u_old, _ = init_vuz(self.A, self.D, x, device=self.device)
 
         for layer_id in range(output_layer):
             layer_params = self.parameter_groups[f'layer-{layer_id}']
@@ -428,7 +428,7 @@ class StepSubGradTV(_ListaAnalysis):
         output_layer = self.check_output_layer(output_layer)
 
         # initialized variables
-        _, u, _ = init_vuz(self.A, self.D, x, lbda, device=self.device)
+        _, u, _ = init_vuz(self.A, self.D, x, device=self.device)
 
         for layer_id in range(output_layer):
             layer_params = self.parameter_groups[f'layer-{layer_id}']

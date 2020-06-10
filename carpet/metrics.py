@@ -28,7 +28,7 @@ def compute_prox_tv_errors(network, x, lbda):
 
     x = check_tensor(x, device=network.device)
 
-    _, u, _ = init_vuz(network.A, network.D, x, lbda, inv_A=network.inv_A_,
+    _, u, _ = init_vuz(network.A, network.D, x, inv_A=network.inv_A_,
                        device=network.device)
 
     l_diff_loss = []

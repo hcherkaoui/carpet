@@ -19,7 +19,7 @@ def test_untrained_synthesis_lista(lbda, parametrization, n):
     """ Test the gradient of z. """
     rng = check_random_state(None)
     x, _, _, L, D, A = synthetic_1d_dataset(n=n, s=0.5, snr=0.0, seed=rng)
-    _, _, z0 = init_vuz(A, D, x, lbda)
+    _, _, z0 = init_vuz(A, D, x)
 
     n_layers = 10
     LA = L.dot(A)
@@ -42,7 +42,7 @@ def test_untrained_synthesis_lista(lbda, parametrization, n):
                   step_size=step_size, early_stopping=False, debug=True,
                   verbose=0,
                   )
-    _, _, loss_ista = fista(**params)
+    _, loss_ista = fista(**params)
 
     np.testing.assert_allclose(loss_ista, loss_untrained_lista, atol=1e-20)
 
@@ -55,7 +55,7 @@ def test_untrained_analysis_lista(lbda, parametrization, n):
     """ Test the gradient of z. """
     rng = check_random_state(None)
     x, _, _, _, D, A = synthetic_1d_dataset(n=n, s=0.5, snr=0.0, seed=rng)
-    v0, u0, _ = init_vuz(A, D, x, lbda)
+    v0, u0, _ = init_vuz(A, D, x)
 
     n_layers = 10
     rho = 1.0
@@ -72,7 +72,7 @@ def test_untrained_analysis_lista(lbda, parametrization, n):
         loss_untrained_condat.append(analysis_primal_obj(z, A, D, x, lbda))
     loss_untrained_condat = np.array(loss_untrained_condat)
 
-    v0, u0, _ = init_vuz(A, D, x, lbda, force_numpy=True)
+    v0, u0, _ = init_vuz(A, D, x, force_numpy=True)
     params = dict(
              grad=lambda u: analysis_primal_grad(u, A, x),
              obj=lambda u: analysis_primal_obj(u, A, D, x, lbda),
@@ -81,6 +81,6 @@ def test_untrained_analysis_lista(lbda, parametrization, n):
              v0=v0, z0=u0, lbda=lbda, sigma=sigma, tau=tau, rho=rho,
              max_iter=n_layers, early_stopping=False, debug=True, verbose=0,
              )
-    _, _, _, _, loss_condat = condatvu(**params)
+    _, _, loss_condat = condatvu(**params)
 
     np.testing.assert_allclose(loss_condat, loss_untrained_condat, atol=1e-20)

@@ -93,7 +93,7 @@ class OrigChambolleTV(_ListaAnalysisDual):
         output_layer = self.check_output_layer(output_layer)
 
         # initialized variables
-        v, _, _ = init_vuz(self.A, self.D, x, lbda, inv_A=self.inv_A_,
+        v, _, _ = init_vuz(self.A, self.D, x, inv_A=self.inv_A_,
                            device=self.device)
 
         for layer_id in range(output_layer):
@@ -134,7 +134,7 @@ class CoupledChambolleTV(_ListaAnalysisDual):
         output_layer = self.check_output_layer(output_layer)
 
         # initialized variables
-        v, _, _ = init_vuz(self.A, self.D, x, lbda, inv_A=self.inv_A_,
+        v, _, _ = init_vuz(self.A, self.D, x, inv_A=self.inv_A_,
                            device=self.device)
 
         for layer_id in range(output_layer):
@@ -171,7 +171,7 @@ class StepChambolleTV(_ListaAnalysisDual):
         output_layer = self.check_output_layer(output_layer)
 
         # initialized variables
-        v, _, _ = init_vuz(self.A, self.D, x, lbda, inv_A=self.inv_A_,
+        v, _, _ = init_vuz(self.A, self.D, x, inv_A=self.inv_A_,
                            device=self.device)
 
         for layer_id in range(output_layer):
