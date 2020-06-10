@@ -12,9 +12,9 @@ from carpet import LearnTVAlgo
 from carpet.utils import init_vuz, v_to_u
 from carpet.loss_gradient import (analysis_primal_obj, analysis_primal_grad,
                                   analysis_dual_grad, synthesis_primal_grad,
-                                  synthesis_primal_obj, tv_reg, l1_reg)
+                                  synthesis_primal_obj, analysis_dual_obj)
 from carpet.optimization import fista, condatvu
-from carpet.proximity import pseudo_soft_th_numpy
+from carpet.proximity import _soft_th_numpy, pseudo_soft_th_numpy
 
 
 memory = Memory('__cache_dir__', verbose=0)
@@ -28,13 +28,12 @@ def synthesis_learned_algo(x_train, x_test, A, D, L, lbda, all_n_layers,
     net_kwargs = dict() if net_kwargs is None else net_kwargs
     params = None
 
-    _, _, z0_test = init_vuz(A, D, x_test, lbda)
-    _, _, z0_train = init_vuz(A, D, x_train, lbda)
+    _, _, z0_test = init_vuz(A, D, x_test)
+    _, _, z0_train = init_vuz(A, D, x_train)
 
     train_loss_init = synthesis_primal_obj(z0_train, A, L, x_train, lbda)
     test_loss_init = synthesis_primal_obj(z0_test, A, L, x_test, lbda)
     train_loss, test_loss = [train_loss_init], [test_loss_init]
-    train_reg, test_reg = [l1_reg(z0_train)], [l1_reg(z0_test)]
 
     for n_layers in all_n_layers:
 
@@ -55,20 +54,17 @@ def synthesis_learned_algo(x_train, x_test, A, D, L, lbda, all_n_layers,
         z_train = algo.transform(x_train, lbda, output_layer=n_layers)
         train_loss_ = synthesis_primal_obj(z_train, A, L, x_train, lbda)
         train_loss.append(train_loss_)
-        train_reg.append(l1_reg(z_train))
 
         z_test = algo.transform(x_test, lbda, output_layer=n_layers)
         test_loss_ = synthesis_primal_obj(z_test, A, L, x_test, lbda)
         test_loss.append(test_loss_)
-        test_reg.append(l1_reg(z_test))
 
         if verbose > 0:
             print(f"\r[{algo.name}|layers#{n_layers:3d}] model fitted "
                   f"{delta_:4.1f}s train-loss={train_loss_:.4e} "
                   f"test-loss={test_loss_:.4e}")
 
-    to_return = (np.array(train_loss), np.array(test_loss),
-                 np.array(train_reg), np.array(test_reg))
+    to_return = (np.array(train_loss), np.array(test_loss))
 
     return to_return
 
@@ -81,13 +77,12 @@ def analysis_learned_algo(x_train, x_test, A, D, L, lbda, all_n_layers, type_,
     net_kwargs = dict() if net_kwargs is None else net_kwargs
     params = None
 
-    _, u0_train, _ = init_vuz(A, D, x_train, lbda)
-    _, u0_test, _ = init_vuz(A, D, x_test, lbda)
+    _, u0_train, _ = init_vuz(A, D, x_train)
+    _, u0_test, _ = init_vuz(A, D, x_test)
 
     train_loss_init = analysis_primal_obj(u0_train, A, D, x_train, lbda)
     test_loss_init = analysis_primal_obj(u0_test, A, D, x_test, lbda)
     train_loss, test_loss = [train_loss_init], [test_loss_init]
-    train_reg, test_reg = [tv_reg(u0_train, D)], [tv_reg(u0_test, D)]
 
     algo_type = 'origtv' if ('untrained' in type_) else type_
 
@@ -111,20 +106,17 @@ def analysis_learned_algo(x_train, x_test, A, D, L, lbda, all_n_layers, type_,
         u_train = algo.transform(x_train, lbda, output_layer=n_layers)
         train_loss_ = analysis_primal_obj(u_train, A, D, x_train, lbda)
         train_loss.append(train_loss_)
-        train_reg.append(tv_reg(u_train, D))
 
         u_test = algo.transform(x_test, lbda, output_layer=n_layers)
         test_loss_ = analysis_primal_obj(u_test, A, D, x_test, lbda)
         test_loss.append(test_loss_)
-        test_reg.append(tv_reg(u_test, D))
 
         if verbose > 0:
             print(f"\r[{algo.name}|layers#{n_layers:3d}] model fitted "
                   f"{delta_:4.1f}s train-loss={train_loss_:.4e} "
                   f"test-loss={test_loss_:.4e}")
 
-    to_return = (np.array(train_loss), np.array(test_loss),
-                 np.array(train_reg), np.array(test_reg))
+    to_return = (np.array(train_loss), np.array(test_loss))
 
     return to_return
 
@@ -142,13 +134,11 @@ def analysis_learned_taut_string(x_train, x_test, A, D, L, lbda, all_n_layers,
         l_loss.append(dict(
             train_loss=analysis_primal_obj(u_train, A, D, x_train, lbda),
             test_loss=analysis_primal_obj(u_test, A, D, x_test, lbda),
-            train_reg=tv_reg(u_train, D),
-            test_reg=tv_reg(u_test, D)
         ))
         return l_loss
 
-    _, u0_train, _ = init_vuz(A, D, x_train, lbda)
-    _, u0_test, _ = init_vuz(A, D, x_test, lbda)
+    _, u0_train, _ = init_vuz(A, D, x_train)
+    _, u0_test, _ = init_vuz(A, D, x_test)
     record_loss(l_loss, u0_train, u0_test)
 
     for n, n_layers in enumerate(all_n_layers):
@@ -181,8 +171,7 @@ def analysis_learned_taut_string(x_train, x_test, A, D, L, lbda, all_n_layers,
                   f"test-loss={test_loss:.4e}")
 
     df = pd.DataFrame(l_loss)
-    to_return = (df['train_loss'].values, df['test_loss'].values,
-                 df['train_reg'].values, df['test_reg'].values)
+    to_return = (df['train_loss'].values, df['test_loss'].values)
 
     return to_return
 
@@ -197,8 +186,8 @@ def synthesis_iter_algo(x_train, x_test, A, D, L, lbda, all_n_layers, type_,
     LA = L.dot(A)
     step_size = 1.0 / np.linalg.norm(LA, ord=2) ** 2
 
-    _, _, z0_test = init_vuz(A, D, x_test, lbda)
-    _, _, z0_train = init_vuz(A, D, x_train, lbda)
+    _, _, z0_test = init_vuz(A, D, x_test)
+    _, _, z0_train = init_vuz(A, D, x_train)
 
     momentum = None if type_ == 'ista' else type_
 
@@ -212,7 +201,7 @@ def synthesis_iter_algo(x_train, x_test, A, D, L, lbda, all_n_layers, type_,
         max_iter=max_iter, step_size=step_size, early_stopping=False,
         debug=True, verbose=verbose,
     )
-    _, saved_z_train, train_loss = fista(**params)
+    _, train_loss = fista(**params)
 
     if verbose > 0:
         print("[ISTA iterative] testing loss")
@@ -224,24 +213,16 @@ def synthesis_iter_algo(x_train, x_test, A, D, L, lbda, all_n_layers, type_,
         max_iter=max_iter, step_size=step_size, early_stopping=False,
         debug=True, verbose=verbose,
     )
-    _, saved_z_test, test_loss = fista(**params)
+    _, test_loss = fista(**params)
 
     train_loss = train_loss[[0] + all_n_layers]
     test_loss = test_loss[[0] + all_n_layers]
-
-    saved_z_train = [saved_z_train[i] for i in [0] + all_n_layers]
-    train_reg = np.array([l1_reg(saved_z_train_)
-                          for saved_z_train_ in saved_z_train])
-
-    saved_z_test = [saved_z_test[i] for i in [0] + all_n_layers]
-    test_reg = np.array([l1_reg(saved_z_test_)
-                         for saved_z_test_ in saved_z_test])
 
     if verbose > 0:
         print(f"[{name}] iterations finished "
               f"train-loss={train_loss[-1]:.4e} test-loss={test_loss[-1]:.4e}")
 
-    return train_loss, test_loss, train_reg, test_reg
+    return train_loss, test_loss
 
 
 def analysis_primal_iter_algo(x_train, x_test, A, D, L, lbda, all_n_layers,
@@ -253,8 +234,8 @@ def analysis_primal_iter_algo(x_train, x_test, A, D, L, lbda, all_n_layers,
     max_iter = all_n_layers[-1]
     step_size = 1.0 / np.linalg.norm(A, ord=2) ** 2
 
-    _, u0_test, _ = init_vuz(A, D, x_test, lbda)
-    _, u0_train, _ = init_vuz(A, D, x_train, lbda)
+    _, u0_test, _ = init_vuz(A, D, x_test)
+    _, u0_train, _ = init_vuz(A, D, x_train)
 
     momentum = None if type_ == 'ista' else type_
 
@@ -268,7 +249,7 @@ def analysis_primal_iter_algo(x_train, x_test, A, D, L, lbda, all_n_layers,
         max_iter=max_iter, step_size=step_size, early_stopping=False,
         debug=True, verbose=verbose,
     )
-    _, saved_z_train, train_loss = fista(**params)
+    _, train_loss = fista(**params)
 
     if verbose > 0:
         print(f"[analysis {name} iterative] testing loss")
@@ -280,24 +261,16 @@ def analysis_primal_iter_algo(x_train, x_test, A, D, L, lbda, all_n_layers,
         max_iter=max_iter, step_size=step_size, early_stopping=False,
         debug=True, verbose=verbose,
     )
-    _, saved_z_test, test_loss = fista(**params)
+    _, test_loss = fista(**params)
 
     train_loss = train_loss[[0] + all_n_layers]
     test_loss = test_loss[[0] + all_n_layers]
-
-    saved_z_train = [saved_z_train[i] for i in [0] + all_n_layers]
-    train_reg = np.array([l1_reg(saved_z_train_)
-                          for saved_z_train_ in saved_z_train])
-
-    saved_z_test = [saved_z_test[i] for i in [0] + all_n_layers]
-    test_reg = np.array([l1_reg(saved_z_test_)
-                         for saved_z_test_ in saved_z_test])
 
     if verbose > 0:
         print(f"\r[{name}] iterations finished "
               f"train-loss={train_loss[-1]:.6e} test-loss={test_loss[-1]:.6e}")
 
-    return train_loss, test_loss, train_reg, test_reg
+    return train_loss, test_loss
 
 
 def analysis_dual_iter_algo(x_train, x_test, A, D, L, lbda, all_n_layers,
@@ -305,27 +278,31 @@ def analysis_dual_iter_algo(x_train, x_test, A, D, L, lbda, all_n_layers,
                             net_kwargs=None, verbose=1):
     """ Chambolle solver for analysis TV problem. """
     net_kwargs = dict() if net_kwargs is None else net_kwargs
-    inv_A = np.linalg.pinv(A)
-    Psi_A = inv_A.dot(D)
+    Psi_A = np.linalg.pinv(A).dot(D)
+    inv_AtA = np.linalg.pinv(A.dot(A.T))
 
     def _grad(v, x):
-        return analysis_dual_grad(v, A, D, x, lbda, Psi_A=Psi_A)
+        return analysis_dual_grad(v, A, D, x, Psi_A=Psi_A)
 
     def _obj(v, x):
         v = np.atleast_2d(v)
-        u = v_to_u(v, x, lbda, Psi_A=Psi_A, inv_A=inv_A)
+        u = v_to_u(v, x, A=A, D=D, inv_AtA=inv_AtA)
+        print(f"\nprimal loss : {analysis_primal_obj(u, A, D, x, lbda):.6f} "
+              f"| neg dual loss : {-analysis_dual_obj(v, A, D, x, lbda):.6f}")
         return analysis_primal_obj(u, A, D, x, lbda)
 
-    def _prox(z, step_size):
-        return np.clip(z, -lbda, lbda)
+    def _prox(v, step_size):
+        # XXX step_size is here to homogenize API
+        v = np.atleast_2d(v)
+        return np.clip(v, -lbda, lbda)
 
-    v0_test, _, _ = init_vuz(A, D, x_test, lbda)
-    v0_train, _, _ = init_vuz(A, D, x_train, lbda)
+    v0_test, _, _ = init_vuz(A, D, x_test)
+    v0_train, _, _ = init_vuz(A, D, x_train)
 
     max_iter = all_n_layers[-1]
-    step_size = 1.0 / np.linalg.norm(Psi_A.T, ord=2) ** 2
-    momentum = None if type_ == 'chambolle' else 'fista'
-    name = 'ISTA' if type_ == 'chambolle' else 'FISTA'
+    step_size = 1.0 / np.linalg.norm(Psi_A, ord=2) ** 2
+    momentum = None if type_ == 'ista' else 'fista'
+    name = 'ISTA' if type_ == 'ista' else 'FISTA'
 
     print("[ISTA iterative] training loss")
     params = dict(
@@ -335,7 +312,7 @@ def analysis_dual_iter_algo(x_train, x_test, A, D, L, lbda, all_n_layers,
         max_iter=max_iter, step_size=step_size, early_stopping=False,
         debug=True, verbose=verbose,
     )
-    _, saved_v_train, train_loss = fista(**params)
+    _, train_loss = fista(**params)
 
     print("[ISTA iterative] testing loss")
     params = dict(
@@ -345,26 +322,15 @@ def analysis_dual_iter_algo(x_train, x_test, A, D, L, lbda, all_n_layers,
         max_iter=max_iter, step_size=step_size, early_stopping=False,
         debug=True, verbose=verbose
     )
-    _, saved_v_test, test_loss = fista(**params)
+    _, test_loss = fista(**params)
 
     train_loss = train_loss[[0] + all_n_layers]
     test_loss = test_loss[[0] + all_n_layers]
 
-    saved_Lz_train = [
-        v_to_u(saved_v_train[i], x_train, lbda, inv_A=inv_A, Psi_A=Psi_A)
-        for i in [0] + all_n_layers]
-    train_reg = np.array([tv_reg(saved_Lz_train_, D)
-                          for saved_Lz_train_ in saved_Lz_train])
-    saved_Lz_test = [
-        v_to_u(saved_v_test[i], x_test, lbda, inv_A=inv_A, Psi_A=Psi_A)
-        for i in [0] + all_n_layers]
-    test_reg = np.array([tv_reg(saved_Lz_test_, D)
-                         for saved_Lz_test_ in saved_Lz_test])
-
     print(f"\r[{name}] iterations finished train-loss={train_loss[-1]:.6e} "
           f"test-loss={test_loss[-1]:.6e}")
 
-    return train_loss, test_loss, train_reg, test_reg
+    return train_loss, test_loss
 
 
 def analysis_primal_dual_iter_algo(x_train, x_test, A, D, L, lbda,
@@ -377,54 +343,40 @@ def analysis_primal_dual_iter_algo(x_train, x_test, A, D, L, lbda,
     sigma = 0.5
     L_A = np.linalg.norm(A, ord=2) ** 2
     L_D = np.linalg.norm(D, ord=2) ** 2
-    tau = 1.0 / (L_A / 2.0 + sigma * L_D**2)
+    tau = 1.0 / (L_A / 2.0 + sigma * L_D)
 
-    v0_test, u0_test, _ = init_vuz(A, D, x_test, lbda, force_numpy=True)
-    v0_train, u0_train, _ = init_vuz(A, D, x_train, lbda, force_numpy=True)
+    v0_test, u0_test, _ = init_vuz(A, D, x_test, force_numpy=True)
+    v0_train, u0_train, _ = init_vuz(A, D, x_train, force_numpy=True)
 
     if verbose > 0:
         print("[Condat-Vu iterative] training loss")
     params = dict(
-        grad=lambda Lz: analysis_primal_grad(Lz, A, x_train),
-        obj=lambda Lz: analysis_primal_obj(Lz, A, D, x_train, lbda),
-        prox=lambda u: pseudo_soft_th_numpy(u, lbda, 1.0 / sigma),
-        psi=lambda Lz: Lz.dot(D),
-        adj_psi=lambda v: v.dot(D.T),
-        v0=v0_train,
-        z0=u0_train,
-        lbda=lbda, sigma=sigma, tau=tau, rho=rho, max_iter=max_iter,
-        early_stopping=False, debug=True, verbose=verbose,
+        grad=lambda u: analysis_primal_grad(u, A, x_train),
+        obj=lambda u: analysis_primal_obj(u, A, D, x_train, lbda),
+        prox=lambda t: _soft_th_numpy(t, lbda / sigma),
+        psi=lambda u: u.dot(D), adj_psi=lambda v: v.dot(D.T),
+        v0=v0_train, z0=u0_train, lbda=lbda, sigma=sigma, tau=tau, rho=rho,
+        max_iter=max_iter, early_stopping=False, debug=True, verbose=verbose,
     )
-    _, _, saved_Lz_train, _, train_loss = condatvu(**params)
+    _, _, train_loss = condatvu(**params)
 
     if verbose > 0:
         print("[Condat-Vu iterative] testing loss")
     params = dict(
-        grad=lambda Lz: analysis_primal_grad(Lz, A, x_test),
-        obj=lambda Lz: analysis_primal_obj(Lz, A, D, x_test, lbda),
-        prox=lambda u: pseudo_soft_th_numpy(u, lbda, 1.0 / sigma),
-        psi=lambda Lz: Lz.dot(D),
-        adj_psi=lambda v: v.dot(D.T),
-        v0=v0_test,
-        z0=u0_test,
-        lbda=lbda, sigma=sigma, tau=tau, rho=rho, max_iter=max_iter,
-        early_stopping=False, debug=True, verbose=verbose,
+        grad=lambda u: analysis_primal_grad(u, A, x_test),
+        obj=lambda u: analysis_primal_obj(u, A, D, x_test, lbda),
+        prox=lambda t: _soft_th_numpy(t, lbda / sigma),
+        psi=lambda u: u.dot(D), adj_psi=lambda v: v.dot(D.T),
+        v0=v0_test, z0=u0_test, lbda=lbda, sigma=sigma, tau=tau, rho=rho,
+        max_iter=max_iter, early_stopping=False, debug=True, verbose=verbose,
     )
-    _, _, saved_Lz_test, _, test_loss = condatvu(**params)
+    _, _, test_loss = condatvu(**params)
 
     train_loss = train_loss[[0] + all_n_layers]
     test_loss = test_loss[[0] + all_n_layers]
-
-    saved_Lz_train = [saved_Lz_train[i] for i in [0] + all_n_layers]
-    train_reg = np.array([tv_reg(saved_Lz_train_, D)
-                          for saved_Lz_train_ in saved_Lz_train])
-
-    saved_Lz_test = [saved_Lz_test[i] for i in [0] + all_n_layers]
-    test_reg = np.array([tv_reg(saved_Lz_test_, D)
-                         for saved_Lz_test_ in saved_Lz_test])
 
     if verbose > 0:
         print(f"\r[Condat-Vu] iterations finished "
               f"train-loss={train_loss[-1]:.4e} test-loss={test_loss[-1]:.4e}")
 
-    return train_loss, test_loss, train_reg, test_reg
+    return train_loss, test_loss
