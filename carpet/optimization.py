@@ -16,7 +16,6 @@ def condatvu(grad, obj, prox, psi, adj_psi, v0, z0, lbda, sigma, tau, rho=1.0,
 
     # saving variables
     dg, pobj_, times_ = [np.linalg.norm(psi(z0) - v0)], [obj(z_old)], [0.0]
-    saved_z_, saved_v_ = [z0], [v0]
 
     for ii in range(max_iter):
 
@@ -43,19 +42,24 @@ def condatvu(grad, obj, prox, psi, adj_psi, v0, z0, lbda, sigma, tau, rho=1.0,
             times_.append(time.process_time() - t0)
 
         if debug:
-            saved_z_.append(z_new)
-            saved_v_.append(v_new)
             pobj_.append(obj(z_new))
             dg.append(np.linalg.norm(psi(z_new) - v_new))
 
-        # printing
-        if debug and verbose > 0:
-            print(f"\r[{name}] Iteration {ii + 1} / {max_iter}, "  # noqa: E999
-                  f"loss = {pobj_[ii]:.6e}, dg = {dg[ii]:.3e}",
+        # verbose at every 100th iterations
+        if debug and verbose > 0 and ii % 100:
+            print(f"\r[{name}] Iteration {100.0 * (ii + 1) / max_iter:.0f}%, "
+                  f"loss = {pobj_[ii]:.3e}, "
+                  f"dg = {dg[ii]:.3e}",
                   end='', flush=True)
 
-        # early-stopping
+        # early-stopping on ||Psi z - v|| < eps
         if early_stopping and dg[-1] < eps:
+            if debug:
+                print(f"\r[{name}] early-stopping "
+                      f"done at {100.0 * (ii + 1) / max_iter:.0f}%, "
+                      f"loss = {pobj_[ii]:.3e}, "
+                      f"dg = {dg[ii]:.3e}")
+                print("\n")
             break
 
     if not times and not debug:
@@ -63,10 +67,9 @@ def condatvu(grad, obj, prox, psi, adj_psi, v0, z0, lbda, sigma, tau, rho=1.0,
     if times and not debug:
         return z_new, v_new, np.array(times_)
     if not times and debug:
-        return z_new, v_new, saved_z_, saved_v_, np.array(pobj_)
+        return z_new, v_new, np.array(pobj_)
     if times and debug:
-        return z_new, v_new, saved_z_, saved_v_, np.array(pobj_), \
-               np.array(times_)
+        return z_new, v_new, np.array(pobj_), np.array(times_)
 
 
 def fista(grad, obj, prox, x0, momentum='fista', restarting=None, max_iter=100,
@@ -92,7 +95,7 @@ def fista(grad, obj, prox, x0, momentum='fista', restarting=None, max_iter=100,
 
     # prepare the iterate
     x_old, x, y, y_old = np.copy(x0), np.copy(x0), np.copy(x0), np.copy(x0)
-    pobj_, times_, diff_, saved_y_ = [obj(y)], [0.0], [0.0], [y]
+    pobj_, times_, diff_ = [obj(x)], [0.0], [0.0]
     t = t_old = 1
 
     # prepare the adaptative-step variables
@@ -141,11 +144,7 @@ def fista(grad, obj, prox, x0, momentum='fista', restarting=None, max_iter=100,
 
         # savings cost-function values
         if debug:
-            saved_y_.append(y)
-            if adaptive_step_size:
-                pobj_.append(old_fval)
-            else:
-                pobj_.append(obj(y))
+            pobj_.append(obj(x))
 
         # savings times, restart after cost-function computation
         if times:
@@ -172,7 +171,7 @@ def fista(grad, obj, prox, x0, momentum='fista', restarting=None, max_iter=100,
         x_old = x
         y_old = y
 
-        # verbose at every 50th iterations
+        # verbose at every 100th iterations
         if debug and verbose > 0 and ii % 100:
             print(f"\r[{name}] Iteration {100.0 * (ii + 1) / max_iter:.0f}%, "
                   f"loss = {pobj_[ii]:.3e}, "
@@ -180,27 +179,28 @@ def fista(grad, obj, prox, x0, momentum='fista', restarting=None, max_iter=100,
                   end='', flush=True)
 
         # early-stopping on || x_k - x_k-1 || < eps
-        if diff_[-1] <= eps and early_stopping:
+        if early_stopping and diff_[-1] <= eps:
             if debug:
                 print(f"\r[{name}] early-stopping "
                       f"done at {100.0 * (ii + 1) / max_iter:.0f}%, "
                       f"loss = {pobj_[ii]:.3e}, "
                       f"grad-norm = {np.linalg.norm(grad_):.3e}")
+                print("\n")
             break
 
         # divergence safeguarding
         if diff_[-1] > np.finfo(np.float64).max:
-            raise RuntimeError(f"[{name}] algo. have diverged during.")
+            raise RuntimeError(f"\n[{name}] algo. have diverged during.")
 
         # savings times
         if times:
             times_.append(delta_t + time.time() - t0)
 
     if not times and not debug:
-        return y
+        return x
     if times and not debug:
-        return y, np.array(times_)
+        return x, np.array(times_)
     if not times and debug:
-        return y, saved_y_, np.array(pobj_)
+        return x, np.array(pobj_)
     if times and debug:
-        return y, saved_y_, np.array(pobj_), np.array(times_)
+        return x, np.array(pobj_), np.array(times_)
