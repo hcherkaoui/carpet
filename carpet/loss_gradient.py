@@ -5,23 +5,11 @@
 import numpy as np
 
 
-def tv_reg(u, D):
-    """ TV regularization. """
-    u = np.atleast_2d(u)
-    return np.sum(np.abs(u.dot(D)))
-
-
-def l1_reg(z):
-    """ l1 norm regularization. """
-    z = np.atleast_2d(z)
-    return np.sum(np.abs(z))
-
-
-def analysis_dual_grad(v, A, D, x, lbda, Psi_A=None):
+def analysis_dual_grad(v, A, D, x, Psi_A=None):
     """ Gradient for the dual formulation of the analysis problem. """
     v = np.atleast_2d(v)
     Psi_A = np.linalg.pinv(A).dot(D) if Psi_A is None else Psi_A
-    return v.dot(Psi_A.T).dot(Psi_A) - x.dot(Psi_A)
+    return (v.dot(Psi_A.T) - x).dot(Psi_A)
 
 
 def analysis_dual_obj(v, A, D, x, lbda, Psi_A=None):
@@ -30,8 +18,9 @@ def analysis_dual_obj(v, A, D, x, lbda, Psi_A=None):
     if np.all(np.abs(v) <= lbda):
         n_samples = v.shape[0]
         Psi_A = np.linalg.pinv(A).dot(D) if Psi_A is None else Psi_A
-        res = v.dot(Psi_A.T)
-        cost = 0.5 * np.sum(res * res) - np.sum(np.diag(x.dot(Psi_A).dot(v.T)))
+        v_PsiAt = v.dot(Psi_A.T)
+        cost = 0.5 * np.sum(v_PsiAt * v_PsiAt)
+        cost -= np.sum(np.diag(x.dot(v_PsiAt.T)))
         return cost / n_samples
     else:
         return np.inf
