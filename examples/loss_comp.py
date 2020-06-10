@@ -18,7 +18,7 @@ from joblib import Memory, Parallel, delayed
 from carpet.utils import init_vuz
 from carpet.datasets import synthetic_1d_dataset
 from carpet.metrics import compute_prox_tv_errors
-from carpet.loss_gradient import analysis_primal_obj, tv_reg
+from carpet.loss_gradient import analysis_primal_obj
 from carpet import ListaTV, LpgdTautString, CoupledIstaLASSO  # noqa: F401
 from carpet.iterative_solver import IstaAnalysis, IstaSynthesis
 
@@ -58,14 +58,12 @@ def run_one(x_train, x_test, A, D, L, lbda, network, all_n_layers, key,
             key=key, **meta, extra_args=extra_args, n_layers=n_layers,
             train_loss=analysis_primal_obj(u_train, A, D, x_train, lbda),
             test_loss=analysis_primal_obj(u_test, A, D, x_test, lbda),
-            train_reg=tv_reg(u_train, D),
-            test_reg=tv_reg(u_test, D),
             prox_tv_loss_train=prox_tv_loss_train,
             prox_tv_loss_test=prox_tv_loss_test
         ))
 
-    _, u0_train, _ = init_vuz(A, D, x_train, lbda)
-    _, u0_test, _ = init_vuz(A, D, x_test, lbda)
+    _, u0_train, _ = init_vuz(A, D, x_train)
+    _, u0_test, _ = init_vuz(A, D, x_test)
     record_loss(u0_train, u0_test, n_layers=0)
 
     for i, n_layers in enumerate(all_n_layers):
