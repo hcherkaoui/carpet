@@ -41,6 +41,7 @@ def compute_prox_tv_errors(network, x, lbda):
 
         # Get the correct prox depending on the layer_id and learn_prox
         mul_lbda = layer_params.get('threshold', 1.0 / network.l_)
+        mul_lbda = max(0, mul_lbda)
         if network.learn_prox == LEARN_PROX_PER_LAYER:
             prox_tv = network.prox_tv[layer_id]
         else:

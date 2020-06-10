@@ -225,8 +225,10 @@ class ListaBase(torch.nn.Module):
         """ Fit the parameters of the network. """
         if self.net_solver_type == 'one_shot':
             params = self.get_params_to_learn(up_to_layer=self.n_layers)
-            self._fit_sub_net_batch_gd(x, lbda, params, self.n_layers,
-                                       self.max_iter)
+            self._fit_sub_net_batch_gd(
+                x, lbda, params, self.n_layers, self.max_iter,
+                output_layer=self.n_layers
+            )
 
         elif self.net_solver_type == 'recursive':
             layers = range(self.train_from, self.n_layers + 1)
@@ -236,7 +238,8 @@ class ListaBase(torch.nn.Module):
                 if max_iter == 0:
                     continue
                 params = self.get_params_to_learn(up_to_layer=layer_id)
-                self._fit_sub_net_batch_gd(x, lbda, params, layer_id, max_iter)
+                self._fit_sub_net_batch_gd(x, lbda, params, layer_id, max_iter,
+                                           output_layer=layer_id)
 
         elif self.net_solver_type == 'greedy':
             layers = range(1, self.n_layers + 1)
@@ -246,7 +249,8 @@ class ListaBase(torch.nn.Module):
                 if max_iter == 0:
                     continue
                 params = self.get_params_to_learn(up_to_layer=layer_id)
-                self._fit_sub_net_batch_gd(x, lbda, params, layer_id, max_iter)
+                self._fit_sub_net_batch_gd(x, lbda, params, layer_id, max_iter,
+                                           output_layer=self.n_layers)
 
         else:
             raise ValueError(f"net_solver_type should belong to "

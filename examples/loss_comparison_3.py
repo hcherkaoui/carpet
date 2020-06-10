@@ -17,7 +17,7 @@ from joblib import Memory, Parallel, delayed
 
 from carpet.datasets import synthetic_1d_dataset
 from carpet.metrics import compute_prox_tv_errors
-from carpet.loss_gradient import analysis_primal_obj
+from carpet.loss_gradient import analysis_primal_obj, tv_reg
 from carpet import ListaTV, LpgdTautString, CoupledIstaLASSO  # noqa: F401
 from carpet.iterative_solver import IstaAnalysis, IstaSynthesis
 
@@ -47,7 +47,10 @@ def run_one(x_train, x_test, A, D, L, lmbd, network, all_n_layers, key,
     print(f"[main script] running {key}")
     print("-" * 80)
 
-    def record_loss(n_layers, algo):
+    extra_args_per_layer = extra_args.copy()
+    extra_args_per_layer['learn_prox'] = 'per-layer'
+
+    def record_loss(n_layers, algo, k=key, ea=extra_args):
         u_train = algo.transform_to_u(x_train, lmbd)
         u_test = algo.transform_to_u(x_test, lmbd)
 
@@ -57,10 +60,12 @@ def run_one(x_train, x_test, A, D, L, lmbd, network, all_n_layers, key,
         else:
             prox_tv_loss_train = prox_tv_loss_test = None
         log.append(dict(
-            key=key, **meta, lmbd=lmbd, extra_args=extra_args,
+            key=k, **meta, lmbd=lmbd, extra_args=ea,
             n_layers=n_layers,
             train_loss=analysis_primal_obj(u_train, A, D, x_train, lmbd),
             test_loss=analysis_primal_obj(u_test, A, D, x_test, lmbd),
+            train_reg=tv_reg(u_train, D),
+            test_reg=tv_reg(u_test, D),
             prox_tv_loss_train=prox_tv_loss_train,
             prox_tv_loss_test=prox_tv_loss_test
         ))
@@ -85,11 +90,34 @@ def run_one(x_train, x_test, A, D, L, lmbd, network, all_n_layers, key,
         record_loss(n_layers=n_layers, algo=algo)
 
         if verbose > 0:
-            train_loss = log[i+1]['train_loss']
-            test_loss = log[i+1]['test_loss']
+            train_loss = log[-1]['train_loss']
+            test_loss = log[-1]['test_loss']
             print(f"\r[{algo.name}|layers#{n_layers:3d}] model fitted "
                   f"{delta_:4.1f}s train-loss={train_loss:.4e} "
                   f"test-loss={test_loss:.4e}")
+
+        if network == ListaTV:
+
+            # declare network
+            algo = network(A=A, n_layers=n_layers, initial_parameters=params,
+                           **extra_args_per_layer, device=device,
+                           verbose=verbose)
+
+            t0_ = time.time()
+            algo.fit(x_train, lmbd)
+            delta_ = time.time() - t0_
+
+            # get train and test error
+            record_loss(n_layers=n_layers, algo=algo,
+                        k=key.replace('none', 'per-layer'),
+                        ea=extra_args_per_layer)
+
+            if verbose > 0:
+                train_loss = log[-1]['train_loss']
+                test_loss = log[-1]['test_loss']
+                print(f"\r[{algo.name}|layers#{n_layers:3d}] model fitted "
+                      f"{delta_:4.1f}s train-loss={train_loss:.4e} "
+                      f"test-loss={test_loss:.4e}")
 
     return log
 
@@ -183,14 +211,14 @@ def run_experiment(max_iter, max_iter_ref=1000, lmbd=.1, seed=None,
     }
 
     # for i, learn_prox in enumerate(['none', 'global', 'per-layer']):
-    for i, learn_prox in enumerate(['none', 'per-layer']):
-        # for n_inner_layer, marker in [(10, '*'), (50, 's'), (100, 'h'),
+    for i, learn_prox in enumerate(['none']):
+        # for n_inner_layers, marker in [(10, '*'), (50, 's'), (100, 'h'),
         #                               (300, 'o'), (500, '>')]:
-        for n_inner_layer, marker in [(50, 's'), (20, '*')]:
-            methods[f'lpgd_lista_{learn_prox}_{n_inner_layer}'] = {
-                'label': f'LPGD - LISTA[{learn_prox}-{n_inner_layer}]',
+        for n_inner_layers, marker in [(50, 's'), (20, '*')]:
+            methods[f'lpgd_lista_{learn_prox}_{n_inner_layers}'] = {
+                'label': f'LPGD - LISTA[{learn_prox}-{n_inner_layers}]',
                 'network': ListaTV,
-                'extra_args': dict(n_inner_layers=n_inner_layer,
+                'extra_args': dict(n_inner_layers=n_inner_layers,
                                    learn_prox=learn_prox,
                                    **learning_parameters),
                 'style': dict(color=f'C{i}', marker=marker, linestyle='-')
@@ -210,10 +238,18 @@ def run_experiment(max_iter, max_iter_ref=1000, lmbd=.1, seed=None,
     # concatenate all results as a big list. Also update style and label
     # here to avoid recomputing the results when changing the style only.
     log = []
+
     for records in results:
         for rec in records:
             k = rec['key']
-            rec.update(style=methods[k]['style'], label=methods[k]['label'])
+            m = methods.get(k, None)
+            if m is None:
+                from copy import deepcopy
+                m = deepcopy(methods[k.replace('per-layer', 'none')])
+                m['style']['color'] = 'C1'
+                m['label'] = m['label'].replace('none', 'per-layer')
+
+            rec.update(style=m['style'], label=m['label'])
             log.append(rec)
 
     # Save the computations in a pickle file

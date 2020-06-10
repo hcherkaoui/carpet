@@ -29,19 +29,19 @@ class ProxTV_l1(torch.autograd.Function):
             np.array([prox_tv.tv1_1d(xx, lbda) for xx in x]),
             device=device, requires_grad=True,
         )
-        mask_U = output - torch.functional.F.pad(output, (1, 0))[..., :-1]
-        ctx.save_for_backward(torch.sign(mask_U))
+        z = output - torch.functional.F.pad(output, (1, 0))[..., :-1]
+        ctx.save_for_backward(torch.sign(z))
         return output
 
     @staticmethod
     def backward(ctx, grad_output):
         """Compute the gradient of proxTV using implicit gradient."""
         batch_size, n_dim = grad_output.shape
-        sign_u, = ctx.saved_tensors
+        sign_z, = ctx.saved_tensors
         device = grad_output.device
-        S = sign_u != 0
+        S = sign_z != 0
         S[:, 0] = True
-        sign_u[:, 0] = 0
+        sign_z[:, 0] = 0
         # XXX do clever computations
         L = torch.triu(torch.ones((n_dim, n_dim), dtype=torch.float64,
                        device=device))
@@ -52,7 +52,7 @@ class ProxTV_l1(torch.autograd.Function):
             grad_u = grad_output[i].matmul(L_S)  # 1 x |S|
             H_S = torch.inverse(L_S.t().matmul(L_S))
             grad_x.append(grad_u.matmul(H_S.matmul(L_S.t())))
-            grad_lbda.append(grad_u.matmul(H_S.matmul(sign_u[i][S[i]])))
+            grad_lbda.append(grad_u.matmul(H_S.matmul(-sign_z[i][S[i]])))
         grad_x = torch.stack(grad_x)
         grad_lbda = torch.stack(grad_lbda)
         return (grad_x, grad_lbda)
