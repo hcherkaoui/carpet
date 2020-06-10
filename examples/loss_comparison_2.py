@@ -15,7 +15,6 @@ import matplotlib.pyplot as plt
 from joblib import Memory, Parallel, delayed
 
 
-from carpet.utils import init_vuz
 from carpet.datasets import synthetic_1d_dataset
 from carpet.metrics import compute_prox_tv_errors
 from carpet.loss_gradient import analysis_primal_obj, tv_reg
@@ -41,32 +40,35 @@ def logspace_layers(n_layers=10, max_depth=50):
 # Main experiment runner
 
 @memory.cache(ignore=['verbose', 'device'])
-def run_one(x_train, x_test, A, D, L, lbda, network, all_n_layers, key,
+def run_one(x_train, x_test, A, D, L, lmbd, network, all_n_layers, key,
             extra_args, meta={}, device=None, verbose=1):
     params = None
     log = []
     print(f"[main script] running {key}")
     print("-" * 80)
 
-    def record_loss(u_train, u_test, n_layers):
-        if isinstance(network, ListaTV):
-            prox_tv_loss_train = compute_prox_tv_errors(network, x_train, lbda)
-            prox_tv_loss_test = compute_prox_tv_errors(network, x_test, lbda)
+    def record_loss(n_layers, algo):
+        u_train = algo.transform_to_u(x_train, lmbd)
+        u_test = algo.transform_to_u(x_test, lmbd)
+
+        if isinstance(algo, ListaTV):
+            prox_tv_loss_train = compute_prox_tv_errors(algo, x_train, lmbd)
+            prox_tv_loss_test = compute_prox_tv_errors(algo, x_test, lmbd)
         else:
             prox_tv_loss_train = prox_tv_loss_test = None
         log.append(dict(
-            key=key, **meta, extra_args=extra_args, n_layers=n_layers,
-            train_loss=analysis_primal_obj(u_train, A, D, x_train, lbda),
-            test_loss=analysis_primal_obj(u_test, A, D, x_test, lbda),
+            key=key, **meta, lmbd=lmbd, extra_args=extra_args,
+            n_layers=n_layers,
+            train_loss=analysis_primal_obj(u_train, A, D, x_train, lmbd),
+            test_loss=analysis_primal_obj(u_test, A, D, x_test, lmbd),
             train_reg=tv_reg(u_train, D),
             test_reg=tv_reg(u_test, D),
             prox_tv_loss_train=prox_tv_loss_train,
             prox_tv_loss_test=prox_tv_loss_test
         ))
 
-    _, u0_train, _ = init_vuz(A, D, x_train, lbda)
-    _, u0_test, _ = init_vuz(A, D, x_test, lbda)
-    record_loss(u0_train, u0_test, n_layers=0)
+    algo = network(A=A, n_layers=0)
+    record_loss(n_layers=0, algo=algo)
 
     for i, n_layers in enumerate(all_n_layers):
 
@@ -75,16 +77,14 @@ def run_one(x_train, x_test, A, D, L, lbda, network, all_n_layers, key,
                        **extra_args, device=device, verbose=verbose)
 
         t0_ = time.time()
-        algo.fit(x_train, lbda=lbda)
+        algo.fit(x_train, lmbd)
         delta_ = time.time() - t0_
 
         # save parameters
         params = algo.export_parameters()
 
         # get train and test error
-        u_train = algo.transform_to_u(x_train, lbda)
-        u_test = algo.transform_to_u(x_test, lbda)
-        record_loss(u_train, u_test, n_layers=n_layers)
+        record_loss(n_layers=n_layers, algo=algo)
 
         if verbose > 0:
             train_loss = log[i+1]['train_loss']
@@ -96,8 +96,8 @@ def run_one(x_train, x_test, A, D, L, lbda, network, all_n_layers, key,
     return log
 
 
-def run_experiment(max_iter, max_iter_ref=1000, device=None, seed=None,
-                   net_solver_type='recursive', n_jobs=1):
+def run_experiment(max_iter, max_iter_ref=1000, lmbd=.1, seed=None,
+                   net_solver_type='recursive', n_jobs=1, device=None):
     # Define variables
     n_samples_train = 1000
     n_samples_testing = 1000
@@ -106,8 +106,9 @@ def run_experiment(max_iter, max_iter_ref=1000, device=None, seed=None,
     n_dim = 5
     s = 0.2
     snr = 0.0
+
+    # Layers that are sampled
     all_n_layers = logspace_layers(n_layers=10, max_depth=40)
-    lbda = 1.0
 
     timestamp = datetime.now()
 
@@ -135,7 +136,6 @@ def run_experiment(max_iter, max_iter_ref=1000, device=None, seed=None,
     learning_parameters = dict(
         net_solver_type=net_solver_type, max_iter=max_iter
     )
-    n_inner_layer = 100
 
     methods = {
         'lista_synthesis': {
@@ -184,9 +184,11 @@ def run_experiment(max_iter, max_iter_ref=1000, device=None, seed=None,
         }
     }
 
-    for i, learn_prox in enumerate(['none', 'global', 'per-layer']):
-        for n_inner_layer, marker in [(10, '*'), (50, 's'), (100, 'h'),
-                                      (300, 'o'), (500, '>')]:
+    # for i, learn_prox in enumerate(['none', 'global', 'per-layer']):
+    for i, learn_prox in enumerate(['none', 'per-layer']):
+        # for n_inner_layer, marker in [(10, '*'), (50, 's'), (100, 'h'),
+        #                               (300, 'o'), (500, '>')]:
+        for n_inner_layer, marker in [(50, 's'), (20, '*')]:
             methods[f'lpgd_lista_{learn_prox}_{n_inner_layer}'] = {
                 'label': f'LPGD - LISTA[{learn_prox}-{n_inner_layer}]',
                 'network': ListaTV,
@@ -200,7 +202,7 @@ def run_experiment(max_iter, max_iter_ref=1000, device=None, seed=None,
     print("=" * 80)
     t0 = time.time()
     results = Parallel(n_jobs=n_jobs)(
-        delayed(run_one)(x_train, x_test, A, D, L, lbda=lbda, key=k,
+        delayed(run_one)(x_train, x_test, A, D, L, lmbd=lmbd, key=k,
                          network=m['network'], extra_args=m['extra_args'],
                          all_n_layers=m.get('all_n_layers', all_n_layers),
                          device=device, meta=meta_pb)
@@ -218,7 +220,8 @@ def run_experiment(max_iter, max_iter_ref=1000, device=None, seed=None,
 
     # Save the computations in a pickle file
     df = pd.DataFrame(log)
-    tag = timestamp.strftime('%Y-%m-%d_%Hh%M')
+    t_tag = timestamp.strftime('%Y-%m-%d_%Hh%M')
+    tag = f'{t_tag}_{lmbd}_{seed}'
     df.to_pickle(OUTPUT_DIR / f'{SCRIPT_NAME}_{tag}.pkl')
 
     delta_t = time.strftime("%H h %M min %S s", time.gmtime(time.time() - t0))
@@ -244,6 +247,7 @@ def plot_results(filename=None):
     df = df.query("key != 'reference'")
     ref = ref.loc[ref['n_layers'].idxmax()]
     seed = df.iloc[0]['seed']
+    lmbd = df.iloc[0]['lmbd']
 
     fig, l_axis = plt.subplots(nrows=2, sharex=True, figsize=(15, 20),
                                num=f"[{SCRIPT_NAME}] Loss functions")
@@ -270,7 +274,8 @@ def plot_results(filename=None):
     axis_train.grid()
     axis_train.set_xlabel("Layers [-]", fontsize=15)
     axis_train.set_ylabel('$F(.) - F(z^*)$', fontsize=15)
-    title_ = f'Loss function comparison on training set (seed={seed})'
+    title_ = (f'Loss function comparison on training set (seed={seed},'
+              fr' $\lambda = {lmbd}$)')
     axis_train.set_title(title_, fontsize=18)
 
     # Formatting test loss
@@ -291,6 +296,37 @@ def plot_results(filename=None):
     print("Saving plot at '{}'".format(filename))
     fig.savefig(filename, dpi=300)
 
+    fig = plt.figure()
+    handles = {'Trained': '', 'Untrained': ''}
+    for i, nl in enumerate([20, 50]):
+        handles[f'{nl} inner layers'] = plt.Line2D([], [], color=f'C{i}')
+        for ls, learn, label in [('--', 'none', 'Untrained'),
+                                 ('-', 'per-layer', 'Trained')]:
+            handles[label] = plt.Line2D([], [], color='k', ls=ls)
+            curve = []
+            method = df.query(f"key == 'lpgd_lista_{learn}_{nl}'")
+            for _, v in method.iterrows():
+                prox_tv_loss = v[f'prox_tv_loss_test']
+                if len(prox_tv_loss) == 0:
+                    continue
+                curve.append((v['n_layers'], prox_tv_loss[-1]))
+                layers = np.arange(len(prox_tv_loss)) + 1
+                plt.plot(layers, prox_tv_loss, color=f'C{i}', ls=ls, alpha=.1)
+            curve = np.array(curve).T
+            plt.loglog(curve[0], curve[1], label=v['key'],
+                       color=f'C{i}', ls=ls)
+    plt.xlabel('Layers [-]')
+    plt.ylabel('$P(z^{(t)}) - P(z^*)$')
+    plt.grid()
+    plt.xlim(.9, 40)
+    plt.legend(handles.values(), handles.keys(), ncol=2,
+               loc='lower left', bbox_to_anchor=(-0.08, 1, 1, .05))
+    filename = filename.with_name(
+        filename.name.replace('.pdf', '_comparison_prox_tv.pdf')
+    )
+    print("Saving plot at '{}'".format(filename))
+    fig.savefig(filename, dpi=300)
+
     plt.show()
 
 
@@ -307,10 +343,15 @@ if __name__ == '__main__':
     parser.add_argument('--max-iter', type=int, default=300,
                         help='Max number of iterations to train the '
                         'learnable networks.')
+    parser.add_argument('--lmbd', type=float, default=None,
+                        help='Set the regularisation parameter for the '
+                        'experiment.')
     parser.add_argument('--seed', type=int, default=None,
                         help='Set the seed for the experiment. Can be used '
                         'for debug or to freeze experiments.')
-    parser.add_argument('--plot', action='store_true',
+    parser.add_argument('--solver', type=str, default='recursive',
+                        help='Set the solver for training the networks.')
+    parser.add_argument('--plot', type=str, default=None,
                         help='Only plot the results of a previous run.')
     args = parser.parse_args()
 
@@ -323,7 +364,10 @@ if __name__ == '__main__':
     if not OUTPUT_DIR.exists():
         OUTPUT_DIR.mkdir()
 
-    if not args.plot:
-        run_experiment(max_iter=args.max_iter, device=device, seed=args.seed,
-                       net_solver_type='recursive', n_jobs=args.n_jobs)
-    plot_results()
+    if args.plot is None:
+        run_experiment(max_iter=args.max_iter, lmbd=args.lmbd, seed=args.seed,
+                       net_solver_type=args.solver, n_jobs=args.n_jobs,
+                       device=device)
+        plot_results()
+    else:
+        plot_results(pathlib.Path(args.plot))

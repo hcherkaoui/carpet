@@ -183,7 +183,7 @@ class LpgdTautString(_ListaAnalysis):
         descr='unconstrained parametrization'
     )
 
-    def __init__(self, A, n_layers, learn_th=False, use_moreau=False,
+    def __init__(self, A, n_layers, learn_th=False, use_moreau=True,
                  max_iter=100, net_solver_type="recursive",
                  initial_parameters=None, name="LPGD - Taut-string",
                  verbose=0, device=None):
@@ -224,14 +224,15 @@ class LpgdTautString(_ListaAnalysis):
         # initialized variables
         _, u, _ = init_vuz(self.A, self.D, x, lbda, inv_A=self.inv_A_,
                            device=self.device)
+        mul_lbda = check_tensor(1.0 / self.l_, device=self.device)
 
         for layer_id in range(output_layer):
             layer_params = self.parameter_groups[f'layer-{layer_id}']
             # retrieve parameters
             Wx = layer_params['Wx']
             Wu = layer_params['Wu']
-            mul_lbda = layer_params.get('threshold', 1.0 / self.l_)
-            mul_lbda = check_tensor(mul_lbda, device=self.device)
+            if self.learn_th:
+                mul_lbda = layer_params['threshold']
 
             # apply one 'iteration'
             u = u.matmul(Wu) + x.matmul(Wx)
