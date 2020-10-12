@@ -16,12 +16,16 @@
 Carpet: Neural Net based solver for the 1d-TV problem
 =====================================================
 
-An adaptive optimization package for the 1d-TV problem for research purpose, featuring:
+An adaptive optimization package for the 1d-TV problem for research purpose, proposed in the following paper:  
+
+`Hamza Cherkaoui`_, `Jeremias Sulam`_ and `Thomas Moreau`_ "`Learning to solve TV regularised problems with unrolled algorithms`_", accepted at NeurIPS 2020.
 
 
-- **Classical sparse optimization algorithms**: (primal-dual) ISTA, (primal-dual) FISTA, Condat-Vu
+This package implements:
 
-- **Learnable algorithms**: All the iterative versions cited
+- **Classical solver for TV-regularized optimization problems**: (primal-dual) ISTA, (primal-dual) FISTA, Condat-Vu.
+
+- **Learnable algorithms**: All the iterative versions cited above.
 
 .. Links to different projects
 
@@ -81,3 +85,9 @@ You can check the latest sources with the command::
 or if you have write privileges::
 
     git clone git@github.com:hcherkaoui/carpet
+    
+    
+.. _`Thomas Moreau`: https://tommoral.github.io
+.. _`Hamza Cherkaoui`: https://hcherkaoui.github.io/
+.. _`Jeremias Sulam`: https://sites.google.com/view/jsulam
+.. _`Learning to solve TV regularised problems with unrolled algorithms`: https://hal.archives-ouvertes.fr/hal-02954181
